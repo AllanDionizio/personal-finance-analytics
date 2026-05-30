@@ -443,11 +443,45 @@ fixada) — útil para análise de "esse mês não teve VR".
 
 ## 9. Próximos passos
 
-1. Setup do repo + `pyproject.toml`
-2. `ingestion/color_resolver.py` + `parcela_parser.py` (lib testável isolada)
-3. `ingestion/extract_sheets.py` (main da Fase 0)
-4. Carregamento `raw.*` no DuckDB; validação manual contra totais da planilha
+1. ✅ Setup do repo + `pyproject.toml`
+2. ✅ `ingestion/color_resolver.py` + `parcela_parser.py` + `snapshot_blocks.py` (libs testáveis isoladas)
+3. ✅ `ingestion/extract_sheets.py` (main da Fase 0) — ver seção 10
+4. ⏭️ **PRÓXIMO**: baixar os 6 XLSX para `data/raw/`, rodar a ETL e validar a carga `raw.*` manualmente contra os totais da planilha
 5. dbt staging
 6. dbt marts (incluindo geração de `dim_data`)
 7. Setup do Evidence.dev
 8. Primeira página de dashboard (orçamento)
+
+## 10. Status da ingestão (`extract_sheets.py`)
+
+Implementado e testado contra fixtures sintéticas (2021 e 2022+). **Ainda não
+rodou contra os XLSX reais** — não há arquivos em `data/raw/` (gitignored).
+
+CLI:
+
+```bash
+python -m ingestion.extract_sheets --xlsx-dir data/raw --db data/financas.duckdb
+```
+
+Comportamento implementado:
+
+- Detecta abas mensais por nome (`JAN`, `Fevereiro`, …), a aba `Situação Atual`
+  e a aba `Configurações` (esta só do arquivo cujo nome contém `2026`).
+- **Layout de débito dinâmico**: acha a linha de header e separa lado
+  crédito/débito pela 2ª ocorrência de "Descrição" — cobre 2021 (sem
+  MacroCategoria) e 2022+ sem posições fixas.
+- **Camada raw é literal**: grava `descricao_raw` com o sufixo `(N/M)` intacto.
+  O `parcela_parser` **não** é usado aqui — parsing de parcela e resolução
+  cor → dono/meio_pagamento ficam para a stg (dbt). `color_resolver` é usado só
+  para detectar/contar cores não reconhecidas (warn, não falha).
+- **Idempotência**: recarga por `DELETE WHERE source_file` + INSERT;
+  `transacao_id = sha256(file|sheet|row)[:16]`.
+
+### ⚠️ Pendência para validar com dados reais
+
+O `transacao_id` deriva só de `(file, sheet, row)`. Se uma mesma linha física
+tiver dados de crédito **e** débito (layout lado-a-lado preenchido nos dois
+lados), ambos recebem o mesmo ID → colisão. A ETL **detecta e loga** isso
+(warn `transacao_id duplicado`) sem falhar, mas a stg precisa tratar (provável
+solução: incluir `tipo` no hash da chave em stg). Confirmar a frequência real
+ao rodar contra os 6 XLSX.

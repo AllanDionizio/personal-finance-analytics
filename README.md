@@ -36,6 +36,7 @@ financas-pessoais/
 ├── docs/
 │   └── data-model.md            # design da camada de dados
 ├── ingestion/
+│   ├── extract_sheets.py        # ETL: XLSX → camada raw.* do DuckDB (CLI)
 │   ├── color_resolver.py        # cor de célula (rgb/theme) → dimensão de negócio
 │   ├── parcela_parser.py        # extrai (N/M) da descrição
 │   └── snapshot_blocks.py       # detecta blocos da aba "Situação Atual"
@@ -47,6 +48,21 @@ financas-pessoais/
 ```
 
 ## Uso
+
+### Ingestão (XLSX → `raw.*`)
+
+Baixe os XLSX de origem para `data/raw/` e rode:
+
+```bash
+python -m ingestion.extract_sheets --xlsx-dir data/raw --db data/financas.duckdb
+```
+
+Idempotente: rerodar sobre os mesmos arquivos não duplica registros (recarga
+por `source_file`). Cores de célula não reconhecidas são logadas com contagem,
+sem falhar a execução. Popula `raw.transacoes`, `raw.carteira_snapshots` e
+`raw.categorias_config`.
+
+### Desenvolvimento
 
 ```bash
 # Rodar testes
@@ -69,8 +85,9 @@ mypy ingestion/
 - [x] Lib: `color_resolver` (cor → dono / meio_pagamento)
 - [x] Lib: `parcela_parser` (extração de parcela embutida na descrição)
 - [x] Lib: `snapshot_blocks` (parsing de blocos da Situação Atual)
-- [ ] Orquestrador `extract_sheets.py` (Fase 0)
-- [ ] Carregamento na camada `raw.*` do DuckDB
+- [x] Orquestrador `extract_sheets.py` (Fase 0)
+- [x] Carregamento na camada `raw.*` do DuckDB
+- [ ] Validação manual da carga `raw.*` contra totais da planilha
 - [ ] Modelos dbt staging
 - [ ] Modelos dbt marts (modelo dimensional)
 - [ ] Dashboards Evidence
