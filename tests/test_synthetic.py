@@ -68,6 +68,12 @@ def test_later_layout_has_macro_category(synthetic_dir: Path) -> None:
     assert "macrocategoria" in layout.debit
 
 
+@pytest.mark.parametrize("as_of", [date(FIRST_YEAR - 1, 12, 31), date(LAST_YEAR + 1, 1, 1)])
+def test_as_of_outside_workbook_years_is_rejected(as_of: date) -> None:
+    with pytest.raises(ValueError, match="as_of"):
+        Generator(as_of=as_of)
+
+
 def test_installments_carry_over_from_previous_year(generator: Generator) -> None:
     january = generator.ledger[(FIRST_YEAR, 1)].debits
     carried = [e for e in january if e.when and e.when.year < FIRST_YEAR]

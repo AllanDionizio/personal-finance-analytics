@@ -18,7 +18,8 @@ ingestion runs on the synthetic files unchanged, quirks included:
   snapshot date, and each year's file repeats the whole history so far.
   Columns are added over time, and every block ends with a ``Total:`` row.
 - **Dirty text**: case and whitespace drift, legacy categories missing from
-  the canonical config, blank macro-categories, free text in value columns.
+  the canonical config, blank macro-categories, a note typed over an asset
+  name, stray highlight colors.
 
 Output is deterministic for a given ``--seed`` and ``--as-of``.
 
@@ -67,6 +68,8 @@ Month = tuple[int, int]
 TEXT_SNAPSHOT_DATE = date(2022, 8, 25)
 ALLOCATION_COLUMNS_SINCE = date(2023, 6, 1)
 PROJECTION_COLUMNS_SINCE = date(2025, 1, 1)
+# Long-term fixed income tax, charged on the gain only.
+INCOME_TAX_RATE = 0.15
 
 
 # --------------------------------------------------------------------------
@@ -179,6 +182,8 @@ class Generator:
     """Builds the ledger and the portfolio snapshots, then renders workbooks."""
 
     def __init__(self, seed: int = DEFAULT_SEED, as_of: date = DEFAULT_AS_OF) -> None:
+        if not FIRST_YEAR <= as_of.year <= LAST_YEAR:
+            raise ValueError(f"as_of must fall between {FIRST_YEAR} and {LAST_YEAR}: {as_of}")
         self.rng = random.Random(seed)
         self.as_of = as_of
         self.as_of_month: Month = (as_of.year, as_of.month)
@@ -623,7 +628,8 @@ class Generator:
                 net = None
                 if asset.maturity is not None and asset.maturity > when:
                     months_left = (asset.maturity - when).days / 30.4
-                    net = asset.value * (1 + asset.monthly_return) ** months_left * 0.85
+                    gross = asset.value * (1 + asset.monthly_return) ** months_left
+                    net = gross - INCOME_TAX_RATE * max(0.0, gross - asset.cost)
                 name = asset.name
                 if asset.bank == "Carteira Digital Zeta" and when >= date(2026, 1, 1):
                     name = "Alterado para 110% CDI"  # a note typed over the asset name
@@ -726,6 +732,12 @@ def _write_summary(ws: Worksheet, year: int, book: MonthBook) -> None:
     for entry in book.debits:
         if entry.fill is not None:
             by_card[str(entry.fill[1])] += entry.amount
+    by_owner: dict[str, float] = defaultdict(float)
+    for entry in book.credits:
+        if entry.fill in {("rgb", c.PERSON_A_RGB), ("theme", c.PERSON_A_THEME)}:
+            by_owner["A"] += entry.amount
+        elif entry.fill in {("rgb", c.PERSON_B_RGB), ("theme", c.PERSON_B_THEME)}:
+            by_owner["B"] += entry.amount
     balance = credits - debits
     goal = 0.2 * credits
 
@@ -742,8 +754,8 @@ def _write_summary(ws: Worksheet, year: int, book: MonthBook) -> None:
         return
 
     ws["I3"], ws["K3"] = "Créditos:", credits
-    ws["K4"] = " Person A:"
-    ws["K5"] = " Person B:"
+    ws["K4"], ws["L4"] = " Person A:", by_owner["A"]
+    ws["K5"], ws["L5"] = " Person B:", by_owner["B"]
     ws["I6"], ws["K6"] = "Débitos:", debits
     ws["I7"], ws["K7"], ws["L7"] = "Cartão de crédito:", "Card A:", by_card[c.CARD_A_RGB]
     ws["K8"], ws["L8"] = "Card B:", by_card[c.CARD_B_RGB]
