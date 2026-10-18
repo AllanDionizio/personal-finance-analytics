@@ -7,22 +7,38 @@ from pathlib import Path
 
 import pytest
 
-# Caminho pra um XLSX real usado como fixture de integração.
-# Default: data/raw/2026.xlsx (você baixa do Drive antes de rodar).
-# Pode ser sobrescrito via env var FINANCAS_FIXTURE_XLSX.
-_DEFAULT_FIXTURE = Path(__file__).parent.parent / "data" / "raw" / "2026.xlsx"
-FIXTURE_XLSX = Path(os.environ.get("FINANCAS_FIXTURE_XLSX", _DEFAULT_FIXTURE))
+from ingestion.extract_sheets import run
+from synthetic.generate import FILE_TEMPLATE, LAST_YEAR, generate
+
+# Por padrão os testes de integração rodam sobre os XLSX sintéticos, gerados
+# uma vez por sessão. Para rodar contra um XLSX real, aponte
+# FINANCAS_FIXTURE_XLSX para ele.
+FIXTURE_XLSX_ENV = "FINANCAS_FIXTURE_XLSX"
 
 
 @pytest.fixture(scope="session")
-def fixture_xlsx_path() -> Path:
-    """Caminho pro XLSX usado em testes de integração.
+def synthetic_dir(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """Diretório com os XLSX sintéticos de todos os anos (seed e as-of padrão)."""
+    out = tmp_path_factory.mktemp("synthetic")
+    generate(out)
+    return out
 
-    Pula o teste se o arquivo não existir.
-    """
-    if not FIXTURE_XLSX.exists():
-        pytest.skip(
-            f"Fixture XLSX não encontrado em {FIXTURE_XLSX}. "
-            f"Baixe um XLSX real pra `data/raw/` ou setar FINANCAS_FIXTURE_XLSX."
-        )
-    return FIXTURE_XLSX
+
+@pytest.fixture(scope="session")
+def fixture_xlsx_path(synthetic_dir: Path) -> Path:
+    """XLSX usado nos testes de integração: o sintético mais recente ou o real."""
+    override = os.environ.get(FIXTURE_XLSX_ENV)
+    if override:
+        path = Path(override)
+        if not path.exists():
+            pytest.skip(f"{FIXTURE_XLSX_ENV} aponta para um arquivo inexistente: {path}")
+        return path
+    return synthetic_dir / FILE_TEMPLATE.format(year=LAST_YEAR)
+
+
+@pytest.fixture(scope="session")
+def raw_db(synthetic_dir: Path, tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """DuckDB com a camada raw.* carregada a partir dos XLSX sintéticos."""
+    db = tmp_path_factory.mktemp("warehouse") / "warehouse.duckdb"
+    run(synthetic_dir, db)
+    return db

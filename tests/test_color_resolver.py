@@ -1,7 +1,7 @@
 """Testes do color_resolver.
 
 Inclui testes puros pra `dono_from_hex` / `meio_pagamento_from_hex` e
-testes de integração que requerem um XLSX real como fixture.
+testes de integração sobre o XLSX sintético (ou um real, via env var).
 """
 
 from __future__ import annotations
@@ -89,12 +89,12 @@ class TestMeioPagamentoFromHex:
 
 
 # --------------------------------------------------------------------------
-# Testes de integração — requer XLSX real
+# Testes de integração — XLSX sintético ou real
 # --------------------------------------------------------------------------
 
 
 class TestThemePalette:
-    """Lê a paleta do tema do XLSX real."""
+    """Lê a paleta do tema do XLSX."""
 
     def test_paleta_tem_12_entradas(self, fixture_xlsx_path: Path) -> None:
         palette = load_theme_palette(fixture_xlsx_path)
@@ -116,50 +116,54 @@ class TestThemePalette:
             load_theme_palette("/tmp/nao_existe_zzz.xlsx")
 
 
+@pytest.fixture(scope="module")
+def wb(fixture_xlsx_path: Path):
+    from openpyxl import load_workbook
+
+    return load_workbook(fixture_xlsx_path, data_only=True)
+
+
+@pytest.fixture(scope="module")
+def palette(fixture_xlsx_path: Path) -> list[str | None]:
+    return load_theme_palette(fixture_xlsx_path)
+
+
 class TestResolveCellColorReal:
-    """Resolve cor em células reais usando openpyxl."""
+    """Resolve cor em células do XLSX usando openpyxl."""
 
-    @pytest.fixture(scope="class")
-    def ws_jan(self, fixture_xlsx_path: Path):
-        from openpyxl import load_workbook
+    MESES = ("JAN", "FEV", "MAR", "ABR", "MAI", "JUN", "JUL", "AGO", "SET", "OUT", "NOV", "DEZ")
 
-        wb = load_workbook(fixture_xlsx_path, data_only=True)
-        return wb["JAN"]
+    def _primeira_celula(self, wb, col: int, source_type: str, hex_color: str, palette):
+        """Primeira célula da coluna, em qualquer aba mensal, cuja cor vem de
+        `source_type` e resolve para `hex_color`."""
+        for sheet in self.MESES:
+            ws = wb[sheet]
+            for row in range(16, ws.max_row + 1):
+                cell = ws.cell(row, col)
+                if cell.value is None:
+                    continue
+                result = resolve_cell_color(cell, palette)
+                if result.source_type == source_type and result.hex == hex_color:
+                    return cell
+        pytest.fail(f"Nenhuma célula {source_type} {hex_color} na coluna {col}")
 
-    @pytest.fixture(scope="class")
-    def palette(self, fixture_xlsx_path: Path) -> list[str | None]:
-        return load_theme_palette(fixture_xlsx_path)
+    def test_resolve_cor_rgb_direto(self, wb, palette) -> None:
+        """Entrada de Person A gravada como rgb FF4BACC6 → 4BACC6."""
+        cell = self._primeira_celula(wb, 4, "rgb", "4BACC6", palette)
+        assert resolve_dono(cell, palette) == "Person A"
 
-    def test_resolve_cor_rgb_direto(self, ws_jan, palette) -> None:
-        """D19 (entrada de Person A) deve resolver como rgb FF4BACC6 → 4BACC6."""
-        cell = ws_jan.cell(19, 4)
-        result = resolve_cell_color(cell, palette)
-        assert result.hex == "4BACC6"
-        assert result.source_type == "rgb"
+    def test_resolve_cor_theme(self, wb, palette) -> None:
+        """Entrada de Person B gravada como theme=9 → F79646."""
+        cell = self._primeira_celula(wb, 4, "theme", "F79646", palette)
+        assert resolve_dono(cell, palette) == "Person B"
 
-    def test_resolve_cor_theme(self, ws_jan, palette) -> None:
-        """D26 (entrada de Person B) usa theme=9 — deve resolver como F79646."""
-        cell = ws_jan.cell(26, 4)
-        result = resolve_cell_color(cell, palette)
-        assert result.hex == "F79646"
-        assert result.source_type == "theme"
+    def test_mesma_cor_em_rgb_e_theme_resolve_igual(self, wb, palette) -> None:
+        """O quirk do Google Sheets: a cor de Person A aparece nas duas formas."""
+        rgb = self._primeira_celula(wb, 4, "rgb", "4BACC6", palette)
+        theme = self._primeira_celula(wb, 4, "theme", "4BACC6", palette)
+        assert resolve_dono(rgb, palette) == resolve_dono(theme, palette) == "Person A"
 
-    def test_resolve_dono_de_celula(self, ws_jan, palette) -> None:
-        """Atalhos resolve_dono e resolve_meio_pagamento funcionam end-to-end."""
-        # D19 → Person A
-        assert resolve_dono(ws_jan.cell(19, 4), palette) == "Person A"
-        # D26 → Person B (via theme)
-        assert resolve_dono(ws_jan.cell(26, 4), palette) == "Person B"
-
-    def test_resolve_nubank_de_saida(self, ws_jan, palette) -> None:
+    def test_resolve_card_a_de_saida(self, wb, palette) -> None:
         """Saídas (col L) com cor B4A7D6 devem mapear como Card A."""
-        # Procurar uma célula com Card A — pegar a primeira linha de saída
-        for row in range(19, 100):
-            cell = ws_jan.cell(row, 12)  # col L
-            if cell.value is None:
-                continue
-            color = resolve_cell_color(cell, palette)
-            if color.hex == "B4A7D6":
-                assert resolve_meio_pagamento(cell, palette) == "Card A"
-                return
-        pytest.fail("Nenhuma célula com cor de Card A encontrada em JAN")
+        cell = self._primeira_celula(wb, 12, "rgb", "B4A7D6", palette)
+        assert resolve_meio_pagamento(cell, palette) == "Card A"
