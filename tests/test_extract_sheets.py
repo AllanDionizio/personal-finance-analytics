@@ -12,7 +12,13 @@ import pytest
 
 from ingestion.extract_sheets import run
 from synthetic import catalog
-from synthetic.generate import FILE_TEMPLATE, FIRST_YEAR, Generator
+from synthetic.generate import (
+    FILE_TEMPLATE,
+    FIRST_YEAR,
+    LAST_YEAR,
+    TEXT_SNAPSHOT_DATE,
+    Generator,
+)
 
 
 @pytest.fixture(scope="module")
@@ -72,25 +78,30 @@ def test_reload_is_idempotent_and_logs_unknown_colors(
     assert "FFFF00" in caplog.text  # the stray highlight color
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "Known bug: credits and debits share sheet rows, and transacao_id hashes only "
-        "file|sheet|row, so both sides of a row get the same id."
-    ),
-)
 def test_transaction_ids_are_unique(con) -> None:
+    """Credits and debits share sheet rows, so the id must include the side."""
     sql = "select count(*) - count(distinct transacao_id) from raw.transacoes"
     assert _scalar(con, sql) == 0
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "Known bug: the 'Total:' label sits in column C, but iter_snapshot_rows only "
-        "checks the first header column (B), so each block's total is loaded as a holding."
-    ),
-)
 def test_snapshot_totals_are_not_loaded_as_holdings(con) -> None:
+    """Each block ends with a 'Total:' row labeled in column C, not B."""
     sql = "select count(*) from raw.carteira_snapshots where aplicacao ilike 'total%'"
     assert _scalar(con, sql) == 0
+
+
+def test_snapshot_sums_match_the_portfolio(con) -> None:
+    """Per snapshot, loaded holdings add up to the generated portfolio, whatever the
+    total row's label: a leaked total row would double the sum."""
+    expected = {
+        s.when: round(sum(h.value for h in s.holdings), 2)
+        for s in Generator().build().snapshots
+        if s.when != TEXT_SNAPSHOT_DATE
+    }
+    sql = f"""
+        select data_referencia, sum(valor_bruto) from raw.carteira_snapshots
+        where source_file = '{FILE_TEMPLATE.format(year=LAST_YEAR)}'
+        group by 1
+    """
+    loaded = {when: round(float(total), 2) for when, total in con.execute(sql).fetchall()}
+    assert loaded == expected

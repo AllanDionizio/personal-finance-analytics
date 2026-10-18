@@ -7,7 +7,7 @@ from datetime import date
 from pathlib import Path
 
 import pytest
-from openpyxl import load_workbook
+from openpyxl import Workbook, load_workbook
 
 from ingestion.snapshot_blocks import (
     SnapshotBlock,
@@ -134,3 +134,29 @@ class TestRegressao:
         primeiro = find_snapshot_blocks(situacao_atual)[0]
         assert primeiro.header_row is None
         assert list(iter_snapshot_rows(situacao_atual, primeiro)) == []
+
+
+class TestLinhaDeTotal:
+    """Linhas de totalização não podem virar aplicações."""
+
+    @pytest.fixture
+    def ws(self):
+        ws = Workbook().active
+        ws["B2"], ws["C2"] = "Data Referência:", date(2025, 3, 25)
+        ws["B3"], ws["C3"], ws["D3"] = "Banco/Corretora", "Aplicação", "Valor Bruto"
+        ws["B4"], ws["C4"], ws["D4"] = "Banco X", "Total Return Fund", 100.0
+        ws["B5"], ws["C5"], ws["D5"] = "Banco Y", "CDB", 200.0
+        return ws
+
+    def _aplicacoes(self, ws) -> list[str]:
+        (block,) = find_snapshot_blocks(ws)
+        return [r["aplicacao"] for r in iter_snapshot_rows(ws, block)]
+
+    @pytest.mark.parametrize("label_cell", ["B7", "C7"])
+    def test_total_em_qualquer_coluna_de_rotulo(self, ws, label_cell: str) -> None:
+        ws[label_cell], ws["D7"] = "Total:", 300.0
+        assert self._aplicacoes(ws) == ["Total Return Fund", "CDB"]
+
+    def test_variacoes_de_caixa_e_espaco(self, ws) -> None:
+        ws["C7"], ws["D7"] = "  TOTAL  ", 300.0
+        assert self._aplicacoes(ws) == ["Total Return Fund", "CDB"]

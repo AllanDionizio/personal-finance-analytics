@@ -363,13 +363,14 @@ Configurações 2026, marcar como `'Desconhecido'` e logar.
 ```python
 import hashlib
 transacao_id = hashlib.sha256(
-    f"{source_file}|{source_sheet}|{source_row}".encode()
+    f"{source_file}|{source_sheet}|{source_row}|{tipo}".encode()
 ).hexdigest()[:16]
 ```
 
 Rodar a ETL N vezes sobre o mesmo XLSX produz o mesmo ID. Se a linha
 mudar de posição no XLSX, vira ID novo — isso é OK porque a fonte é o
-XLSX, não a entidade lógica.
+XLSX, não a entidade lógica. O `tipo` (`credito`/`debito`) entra no hash
+porque os dois lados dividem a mesma linha física.
 
 ### 6.6 Filtro de linhas
 
@@ -476,13 +477,16 @@ Comportamento implementado:
   cor → dono/meio_pagamento ficam para a stg (dbt). `color_resolver` é usado só
   para detectar/contar cores não reconhecidas (warn, não falha).
 - **Idempotência**: recarga por `DELETE WHERE source_file` + INSERT;
-  `transacao_id = sha256(file|sheet|row)[:16]`.
+  `transacao_id = sha256(file|sheet|row|tipo)[:16]`.
 
-### ⚠️ Pendência para validar com dados reais
+### Bugs encontrados com os dados sintéticos (corrigidos)
 
-O `transacao_id` deriva só de `(file, sheet, row)`. Se uma mesma linha física
-tiver dados de crédito **e** débito (layout lado-a-lado preenchido nos dois
-lados), ambos recebem o mesmo ID → colisão. A ETL **detecta e loga** isso
-(warn `transacao_id duplicado`) sem falhar, mas a stg precisa tratar (provável
-solução: incluir `tipo` no hash da chave em stg). Confirmar a frequência real
-ao rodar contra os 6 XLSX.
+- **`transacao_id` colidindo**: o hash usava só `(file, sheet, row)`, e
+  crédito e débito dividem a mesma linha física. Nos dados sintéticos,
+  934 de 4.142 transações tinham ID repetido. Correção: `tipo` no hash.
+- **Linha `Total:` carregada como aplicação**: o filtro olhava só a
+  primeira coluna do bloco (B), mas o rótulo fica na C. Eram 137 linhas a
+  mais em `raw.carteira_snapshots`, o que dobrava qualquer soma por
+  snapshot. Correção: checar todas as colunas de rótulo e casar o rótulo
+  inteiro (`Total`, `Total:`), para não descartar um ativo como
+  "Total Return Fund".
