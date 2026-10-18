@@ -6,7 +6,7 @@
 
 > An end-to-end analytics engineering project that turns six years of household finance spreadsheets into a tested star schema and a self-serve dashboard.
 
-🚧 **Work in progress.** Ingestion is done. The dbt models, synthetic dataset and dashboard are being built; see [Roadmap](#roadmap).
+🚧 **Work in progress.** Ingestion and the synthetic dataset are done. The dbt models and dashboard are being built; see [Roadmap](#roadmap).
 
 ## Why this project
 
@@ -26,6 +26,18 @@ flowchart LR
     F -.-> D
 ```
 
+## Synthetic data
+
+The real workbooks hold a household's finances, so they never leave the owners' machine. The repo instead ships a generator (`synthetic/`) that writes six yearly workbooks with the same layout, so the ingestion runs on them unchanged:
+
+- credits and debits side by side on the same sheet rows, with a different column layout in 2021
+- owner and card encoded as cell colors, with the same color stored as `rgb` in some cells and as a `theme` index in others
+- card purchases split into `(k/N)` installments that cross year boundaries
+- a portfolio sheet that stacks one block per snapshot, repeats the whole history in every year's file and gains columns over time
+- hand-typed noise: case and whitespace drift, legacy categories, blank macro-categories, stray highlight colors
+
+Output is deterministic for a given seed, so tests and CI always see the same data.
+
 ## Data model
 
 Planned star schema (full design in [`docs/data-model.md`](docs/data-model.md)):
@@ -42,6 +54,8 @@ Planned star schema (full design in [`docs/data-model.md`](docs/data-model.md)):
 ## Data quality
 
 - Python unit tests for every ingestion library (color resolution, installment parsing, snapshot block detection)
+- End-to-end tests that generate the synthetic workbooks, run the ingestion and check what lands in DuckDB
+- Known bugs are pinned as strict `xfail` tests, so the fix has to flip them to passing
 - Planned: generic and custom dbt tests on every key, source freshness, `dbt build` on every pull request
 
 ## Tech stack
@@ -63,15 +77,13 @@ python -m venv .venv && source .venv/bin/activate
 make setup
 ```
 
-Run the ingestion against a folder of XLSX workbooks:
+Generate the synthetic workbooks and load them into DuckDB:
 
 ```bash
-python -m ingestion.extract_sheets --xlsx-dir data/raw --db data/warehouse.duckdb
+make data   # synthetic XLSX → data/synthetic/ → raw.* in data/warehouse.duckdb
 ```
 
-It is idempotent: re-running on the same files reloads by `source_file` without duplicating rows. Unrecognized cell colors are logged with counts instead of failing the run.
-
-Once the synthetic dataset lands, `make seed` and `make build` will run the whole pipeline without credentials or real data.
+No credentials or real data needed. The ingestion is idempotent: re-running on the same files reloads by `source_file` without duplicating rows. Unrecognized cell colors are logged with counts instead of failing the run.
 
 ## Design decisions & trade-offs
 
@@ -85,7 +97,7 @@ Once the synthetic dataset lands, `make seed` and `make build` will run the whol
 - [x] Ingestion libraries with unit tests
 - [x] Ingestion CLI: XLSX → `raw.*` in DuckDB
 - [x] Repository standards: CI, pre-commit, lint
-- [ ] Synthetic dataset with the same structure as the real workbooks
+- [x] Synthetic dataset with the same structure as the real workbooks
 - [ ] dbt staging, intermediate and marts
 - [ ] dbt tests and published dbt docs
 - [ ] Evidence dashboard, deployed on the synthetic data
@@ -95,6 +107,7 @@ Once the synthetic dataset lands, `make seed` and `make build` will run the whol
 ```
 ├── .github/workflows/   # CI
 ├── ingestion/           # Python extract & load
+├── synthetic/           # synthetic workbook generator
 ├── dbt/                 # models, tests, macros, seeds
 ├── tests/               # Python unit tests
 └── docs/                # data model design
