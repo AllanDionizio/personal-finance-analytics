@@ -1,26 +1,25 @@
 """
-Detector de blocos da aba "Situação Atual".
+Block detector for the "Situação Atual" (portfolio) sheet.
 
-A aba é estruturada como blocos empilhados, cada um representando um
-snapshot da carteira em uma `Data Referência` específica. Estrutura típica
-de cada bloco::
+The sheet stacks blocks, each one a snapshot of the investment portfolio on
+a given ``Data Referência`` (reference date). A typical block::
 
-    Linha N:    ... | Data Referência: | 2026-05-23 | ...
-    Linha N+1:  Banco/Corretora | Aplicação | Valor Bruto | Alocação | ...
-    Linha N+2+: <linhas de dados>
-    (linha em branco até o próximo bloco)
+    Row N:    ... | Data Referência: | 2026-05-23 | ...
+    Row N+1:  Banco/Corretora | Aplicação | Valor Bruto | Alocação | ...
+    Row N+2+: <data rows>
+    (blank rows until the next block)
 
-Headers e número de colunas variam entre snapshots (foram sendo adicionados
-ao longo dos anos), por isso o detector resolve cada header dinamicamente
-buscando nomes canônicos.
+Headers and column count change between snapshots (columns were added over
+the years), so each block's header is resolved at runtime by matching known
+header names.
 
-Exemplo de uso::
+Usage::
 
     wb = load_workbook("data/raw/2026.xlsx", data_only=True)
     ws = wb["Situação Atual"]
     for block in find_snapshot_blocks(ws):
         for row in iter_snapshot_rows(ws, block):
-            print(block.data_referencia, row)
+            print(block.reference_date, row)
 """
 
 from __future__ import annotations
@@ -31,98 +30,95 @@ from dataclasses import dataclass, field
 from datetime import date, datetime
 from typing import Any
 
-# Marcador que identifica início de cada bloco
-DATA_REFERENCIA_MARKER = "Data Referência"
+# Marker that opens each block
+REFERENCE_DATE_MARKER = "Data Referência"
 
-# Range de colunas onde a tabela de carteira pode estar.
-# As colunas M+ contêm informação acessória (parcelas pendentes etc.) que
-# não pertence ao snapshot da carteira, então limitamos a busca aqui.
-CARTEIRA_MIN_COL = 1  # A
-CARTEIRA_MAX_COL = 12  # L (12 colunas)
+# Columns the portfolio table can occupy. Columns M+ hold side notes
+# (pending installments etc.) that are not part of the snapshot.
+PORTFOLIO_MIN_COL = 1  # A
+PORTFOLIO_MAX_COL = 12  # L
 
 
-# Mapeamento header observado → nome canônico
-# (chave em lowercase, sem acentos críticos pra robustez — comparação
-# usa _normalize)
+# Header as typed in the sheet (compared after _normalize) → canonical column
 _HEADER_SYNONYMS: dict[str, str] = {
-    "banco/corretora": "banco_corretora",
-    "banco / corretora": "banco_corretora",
-    "banco": "banco_corretora",
-    "corretora": "banco_corretora",
-    "aplicação": "aplicacao",
-    "aplicacao": "aplicacao",
-    "ativo": "aplicacao",
-    "valor bruto": "valor_bruto",
-    "valor": "valor_bruto",
-    "valor atual": "valor_bruto",
-    "alocação": "alocacao_pct",
-    "alocacao": "alocacao_pct",
-    "% alocação": "alocacao_pct",
-    "% alocacao": "alocacao_pct",
-    "vencimento": "vencimento",
+    "banco/corretora": "bank",
+    "banco / corretora": "bank",
+    "banco": "bank",
+    "corretora": "bank",
+    "aplicação": "asset",
+    "aplicacao": "asset",
+    "ativo": "asset",
+    "valor bruto": "gross_value",
+    "valor": "gross_value",
+    "valor atual": "gross_value",
+    "alocação": "allocation_pct",
+    "alocacao": "allocation_pct",
+    "% alocação": "allocation_pct",
+    "% alocacao": "allocation_pct",
+    "vencimento": "maturity_date",
     "mom": "mom",
     "m/m": "mom",
     "yoy": "yoy",
     "y/y": "yoy",
-    "valor líquido final": "valor_liquido_final",
-    "valor liquido final": "valor_liquido_final",
-    "rendimento atual": "rendimento_atual",
-    "rendimento final": "rendimento_final",
+    "valor líquido final": "net_value_at_maturity",
+    "valor liquido final": "net_value_at_maturity",
+    "rendimento atual": "return_to_date",
+    "rendimento final": "return_at_maturity",
 }
 
 
-# Colunas de texto onde pode aparecer o rótulo de uma linha de totalização.
-_LABEL_COLUMNS = ("banco_corretora", "aplicacao")
+# Text columns where a total row's label can appear.
+_LABEL_COLUMNS = ("bank", "asset")
 _TOTAL_LABEL = re.compile(r"total\s*:?")
 
 
 @dataclass
 class SnapshotBlock:
-    """Localização de um bloco de snapshot dentro da aba."""
+    """Where one snapshot block sits in the sheet."""
 
-    data_referencia: date
-    """Data extraída do marcador `Data Referência:`."""
+    reference_date: date
+    """Date read from the ``Data Referência:`` marker."""
 
     marker_row: int
-    """Linha (1-based) onde está o marcador."""
+    """Row (1-based) of the marker."""
 
     header_row: int | None
-    """Linha do header das colunas (1-based) ou None se sem header (snapshot textual)."""
+    """Row (1-based) of the column header, or None for a text-only snapshot."""
 
     end_row: int
-    """Última linha pertencente a este bloco (exclusiva — primeira linha que NÃO faz parte)."""
+    """End of the block, exclusive: the first row that is NOT part of it."""
 
     header_map: dict[str, int] = field(default_factory=dict)
-    """Nome canônico de coluna → índice de coluna (1-based)."""
+    """Canonical column name → column index (1-based)."""
 
 
 def find_snapshot_blocks(ws: Any) -> list[SnapshotBlock]:
-    """Encontra todos os blocos de snapshot numa worksheet.
+    """Find every snapshot block in a worksheet.
 
     Args:
-        ws: worksheet do openpyxl (geralmente `wb["Situação Atual"]`).
+        ws: openpyxl worksheet (usually ``wb["Situação Atual"]``).
 
     Returns:
-        Lista de SnapshotBlock em ordem (do mais antigo ao mais recente).
-        Blocos sem header detectável (ex.: o primeiro snapshot que muitas
-        vezes é só texto-resumo) são retornados com `header_row=None` e
-        `header_map={}` — podem ser pulados pelo consumidor.
+        SnapshotBlocks in sheet order (oldest to newest). Blocks without a
+        detectable header (e.g. the first snapshot, often a text summary)
+        come back with ``header_row=None`` and ``header_map={}``, and the
+        caller can skip them.
     """
-    # Passo 1: localizar todas as linhas com marcador "Data Referência"
+    # Step 1: find every row with a "Data Referência" marker
     markers: list[tuple[int, int, date]] = []
     for row in ws.iter_rows():
         for cell in row:
             value = cell.value
-            if value is not None and DATA_REFERENCIA_MARKER in str(value):
+            if value is not None and REFERENCE_DATE_MARKER in str(value):
                 ref_date = _find_reference_date(ws, cell.row, cell.column)
                 if ref_date is not None:
                     markers.append((cell.row, cell.column, ref_date))
-                break  # um marcador por linha basta
+                break  # one marker per row is enough
 
     if not markers:
         return []
 
-    # Passo 2: pra cada marcador, identificar header e fim do bloco
+    # Step 2: for each marker, find the header and the end of the block
     blocks: list[SnapshotBlock] = []
     for i, (marker_row, _marker_col, ref_date) in enumerate(markers):
         end_row = markers[i + 1][0] if i + 1 < len(markers) else ws.max_row + 1
@@ -130,7 +126,7 @@ def find_snapshot_blocks(ws: Any) -> list[SnapshotBlock]:
         header_row, header_map = _find_header_row(ws, marker_row + 1, end_row)
         blocks.append(
             SnapshotBlock(
-                data_referencia=ref_date,
+                reference_date=ref_date,
                 marker_row=marker_row,
                 header_row=header_row,
                 end_row=end_row,
@@ -142,17 +138,17 @@ def find_snapshot_blocks(ws: Any) -> list[SnapshotBlock]:
 
 
 def iter_snapshot_rows(ws: Any, block: SnapshotBlock) -> Iterator[dict[str, Any]]:
-    """Itera as linhas de dados de um bloco como dicts com nomes canônicos.
+    """Yield a block's data rows as dicts keyed by canonical column name.
 
-    Pula linhas vazias e linhas de totalização ("Total:" em qualquer coluna
-    de rótulo, ver ``_is_total_row``).
+    Skips empty rows and total rows ("Total:" in any label column, see
+    ``_is_total_row``).
 
     Args:
         ws: worksheet.
-        block: SnapshotBlock retornado por `find_snapshot_blocks`.
+        block: SnapshotBlock from ``find_snapshot_blocks``.
 
     Yields:
-        dict {nome_canonico: valor} pra cada linha de dado.
+        dict {canonical_name: value} for each data row.
     """
     if block.header_row is None or not block.header_map:
         return
@@ -176,15 +172,15 @@ def iter_snapshot_rows(ws: Any, block: SnapshotBlock) -> Iterator[dict[str, Any]
 
 
 # --------------------------------------------------------------------------
-# Helpers internos
+# Internal helpers
 # --------------------------------------------------------------------------
 
 
 def _find_reference_date(ws: Any, row: int, marker_col: int) -> date | None:
-    """Procura a data de referência adjacente ao marcador.
+    """Find the reference date next to the marker.
 
-    O marcador "Data Referência:" geralmente fica numa célula e a data
-    numa célula imediatamente à direita. Vasculha até 5 colunas adiante.
+    The "Data Referência:" marker sits in one cell and the date usually in
+    the cell to its right. Looks up to 5 columns ahead.
     """
     for col_offset in range(1, 6):
         cell = ws.cell(row, marker_col + col_offset)
@@ -194,7 +190,7 @@ def _find_reference_date(ws: Any, row: int, marker_col: int) -> date | None:
             return cell.value.date()
         if isinstance(cell.value, date):
             return cell.value
-        # Tentativa best-effort de parsing de string
+        # Best-effort parsing of a date typed as text
         text = str(cell.value).strip()
         for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y"):
             try:
@@ -205,14 +201,14 @@ def _find_reference_date(ws: Any, row: int, marker_col: int) -> date | None:
 
 
 def _find_header_row(ws: Any, start: int, end: int) -> tuple[int | None, dict[str, int]]:
-    """Encontra a primeira linha do range com pelo menos 2 headers canônicos.
+    """Find the first row in range with at least 2 known headers.
 
     Returns:
-        (linha_do_header, dict {nome_canonico: col_index}) ou (None, {}).
+        (header_row, {canonical_name: col_index}) or (None, {}).
     """
     for row in range(start, end):
         header_map: dict[str, int] = {}
-        for col in range(CARTEIRA_MIN_COL, CARTEIRA_MAX_COL + 1):
+        for col in range(PORTFOLIO_MIN_COL, PORTFOLIO_MAX_COL + 1):
             cell_value = ws.cell(row, col).value
             canonical = _match_header(cell_value)
             if canonical and canonical not in header_map:
@@ -223,10 +219,11 @@ def _find_header_row(ws: Any, start: int, end: int) -> tuple[int | None, dict[st
 
 
 def _is_total_row(record: dict[str, Any]) -> bool:
-    """Linha de totalização: alguma coluna de rótulo contém só "Total" ou "Total:".
+    """Total row: some label column holds only "Total" or "Total:".
 
-    O rótulo não fica sempre na primeira coluna do bloco: no XLSX real o
-    "Total:" está na coluna C (Aplicação), com a B (Banco/Corretora) vazia.
+    The label is not always in the block's first column: in the real
+    workbook "Total:" sits in column C (Aplicação), with B (Banco/Corretora)
+    empty.
     """
     for canonical in _LABEL_COLUMNS:
         value = record.get(canonical)
@@ -236,7 +233,7 @@ def _is_total_row(record: dict[str, Any]) -> bool:
 
 
 def _match_header(value: Any) -> str | None:
-    """Casa um valor de célula contra os sinônimos de header conhecidos."""
+    """Match a cell value against the known header synonyms."""
     if value is None:
         return None
     key = _normalize(str(value))
@@ -246,5 +243,5 @@ def _match_header(value: Any) -> str | None:
 
 
 def _normalize(text: str) -> str:
-    """Lowercase + collapse de espaços, sem alterar acentos."""
+    """Lowercase and collapse whitespace, keeping accents."""
     return " ".join(text.strip().lower().split())

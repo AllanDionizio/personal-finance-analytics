@@ -39,23 +39,23 @@ def test_every_generated_row_is_loaded(con) -> None:
         expected[FILE_TEMPLATE.format(year=year)] += len(book.credits) + len(book.debits)
 
     loaded = dict(
-        con.execute("select source_file, count(*) from raw.transacoes group by 1").fetchall()
+        con.execute("select source_file, count(*) from raw.transactions group by 1").fetchall()
     )
     assert loaded == dict(expected)
 
 
 def test_2021_rows_have_no_macro_category(con) -> None:
     sql = f"""
-        select count(*) from raw.transacoes
+        select count(*) from raw.transactions
         where source_file = '{FILE_TEMPLATE.format(year=FIRST_YEAR)}'
-          and macrocategoria_raw is not null
+          and macro_category is not null
     """
     assert _scalar(con, sql) == 0
 
 
 def test_categories_come_only_from_newest_workbook(con) -> None:
     expected = len(catalog.INCOME_CATEGORIES) + len(catalog.EXPENSE_CATEGORIES)
-    assert _scalar(con, "select count(*) from raw.categorias_config") == expected
+    assert _scalar(con, "select count(*) from raw.category_config") == expected
 
 
 def test_reload_is_idempotent_and_logs_unknown_colors(
@@ -69,24 +69,24 @@ def test_reload_is_idempotent_and_logs_unknown_colors(
     with caplog.at_level(logging.WARNING, logger="ingestion.extract_sheets"):
         run(xlsx_dir, db)
     with duckdb.connect(str(db), read_only=True) as connection:
-        first_count = _scalar(connection, "select count(*) from raw.transacoes")
+        first_count = _scalar(connection, "select count(*) from raw.transactions")
 
     run(xlsx_dir, db)
     with duckdb.connect(str(db), read_only=True) as connection:
-        assert _scalar(connection, "select count(*) from raw.transacoes") == first_count
+        assert _scalar(connection, "select count(*) from raw.transactions") == first_count
 
     assert "FFFF00" in caplog.text  # the stray highlight color
 
 
 def test_transaction_ids_are_unique(con) -> None:
     """Credits and debits share sheet rows, so the id must include the side."""
-    sql = "select count(*) - count(distinct transacao_id) from raw.transacoes"
+    sql = "select count(*) - count(distinct transaction_id) from raw.transactions"
     assert _scalar(con, sql) == 0
 
 
 def test_snapshot_totals_are_not_loaded_as_holdings(con) -> None:
     """Each block ends with a 'Total:' row labeled in column C, not B."""
-    sql = "select count(*) from raw.carteira_snapshots where aplicacao ilike 'total%'"
+    sql = "select count(*) from raw.portfolio_snapshots where asset ilike 'total%'"
     assert _scalar(con, sql) == 0
 
 
@@ -99,7 +99,7 @@ def test_snapshot_sums_match_the_portfolio(con) -> None:
         if s.when != TEXT_SNAPSHOT_DATE
     }
     sql = f"""
-        select data_referencia, sum(valor_bruto) from raw.carteira_snapshots
+        select reference_date, sum(gross_value) from raw.portfolio_snapshots
         where source_file = '{FILE_TEMPLATE.format(year=LAST_YEAR)}'
         group by 1
     """
