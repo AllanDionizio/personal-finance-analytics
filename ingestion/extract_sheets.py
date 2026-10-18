@@ -310,13 +310,14 @@ def _track_color(cell: Any, palette: list[str | None], unrecognized: Counter) ->
 # --------------------------------------------------------------------------
 
 
-def _transacao_id(source_file: str, source_sheet: str, source_row: int) -> str:
-    """sha256(source_file|source_sheet|source_row)[:16] — ver seção 6.5.
+def _transacao_id(source_file: str, source_sheet: str, source_row: int, tipo: str) -> str:
+    """sha256(source_file|source_sheet|source_row|tipo)[:16] — ver seção 6.5.
 
     Determinístico: rerodar a ETL sobre o mesmo XLSX produz o mesmo ID. Se a
     linha mudar de posição vira ID novo (a fonte é o XLSX, não a entidade).
+    O `tipo` entra no hash porque crédito e débito dividem a mesma linha física.
     """
-    raw = f"{source_file}|{source_sheet}|{source_row}"
+    raw = f"{source_file}|{source_sheet}|{source_row}|{tipo}"
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
 
 
@@ -365,7 +366,7 @@ def _read_transacao(
     _track_color(valor_cell, palette, unrecognized)
 
     return (
-        _transacao_id(source_file, ws.title, row),
+        _transacao_id(source_file, ws.title, row, tipo),
         source_file,
         ws.title,
         row,
@@ -534,23 +535,6 @@ def _reload_categorias(con: duckdb.DuckDBPyConnection, rows: list[tuple]) -> Non
 # --------------------------------------------------------------------------
 
 
-def _warn_duplicate_ids(source_file: str, rows: list[tuple]) -> None:
-    """Avisa se há `transacao_id` repetido (crédito+débito na mesma linha).
-
-    O `transacao_id` deriva só de (file, sheet, row) por especificação. Quando
-    uma mesma linha física tem dados de crédito E débito, ambos recebem o mesmo
-    ID — colisão a tratar na modelagem stg. Apenas logamos, sem falhar.
-    """
-    counts = Counter(r[0] for r in rows)
-    dups = [tid for tid, c in counts.items() if c > 1]
-    if dups:
-        log.warning(
-            "  %s: %d transacao_id duplicado(s) (linha com crédito+débito?); validar na camada stg",
-            source_file,
-            len(dups),
-        )
-
-
 def process_file(
     con: duckdb.DuckDBPyConnection,
     path: Path,
@@ -580,7 +564,6 @@ def process_file(
         elif _is_configuracoes(sheet_name) and year == CONFIG_SOURCE_YEAR:
             categorias.extend(extract_categorias(ws))
 
-    _warn_duplicate_ids(source_file, transacoes)
     _reload_transacoes(con, source_file, transacoes)
     _reload_snapshots(con, source_file, snapshots)
     if categorias:

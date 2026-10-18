@@ -55,8 +55,17 @@ Planned star schema (full design in [`docs/data-model.md`](docs/data-model.md)):
 
 - Python unit tests for every ingestion library (color resolution, installment parsing, snapshot block detection)
 - End-to-end tests that generate the synthetic workbooks, run the ingestion and check what lands in DuckDB
-- Known bugs are pinned as strict `xfail` tests, so the fix has to flip them to passing
+- Bugs are pinned as strict `xfail` tests first, so the fix has to flip them to passing (see the next section)
 - Planned: generic and custom dbt tests on every key, source freshness, `dbt build` on every pull request
+
+## Bugs the synthetic data caught
+
+Running the ingestion end to end on the synthetic workbooks measured one suspected bug and exposed one nobody knew about:
+
+| Bug | Root cause | Impact before the fix | Fix |
+|---|---|---|---|
+| Duplicate `transacao_id` | The id hashed `file\|sheet\|row`, but a credit and a debit share each sheet row | 934 of 4,142 transactions had a non-unique id | Add the side (`credito`/`debito`) to the hash |
+| Portfolio totals loaded as holdings | The `Total:` filter only checked the block's first column (B); the label sits in C | 137 extra rows, doubling any per-snapshot sum | Check every label column and match the whole label, so a fund named "Total Return" still loads |
 
 ## Tech stack
 

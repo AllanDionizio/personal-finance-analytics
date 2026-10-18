@@ -72,25 +72,13 @@ def test_reload_is_idempotent_and_logs_unknown_colors(
     assert "FFFF00" in caplog.text  # the stray highlight color
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "Known bug: credits and debits share sheet rows, and transacao_id hashes only "
-        "file|sheet|row, so both sides of a row get the same id."
-    ),
-)
 def test_transaction_ids_are_unique(con) -> None:
+    """Credits and debits share sheet rows, so the id must include the side."""
     sql = "select count(*) - count(distinct transacao_id) from raw.transacoes"
     assert _scalar(con, sql) == 0
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "Known bug: the 'Total:' label sits in column C, but iter_snapshot_rows only "
-        "checks the first header column (B), so each block's total is loaded as a holding."
-    ),
-)
 def test_snapshot_totals_are_not_loaded_as_holdings(con) -> None:
+    """Each block ends with a 'Total:' row labeled in column C, not B."""
     sql = "select count(*) from raw.carteira_snapshots where aplicacao ilike 'total%'"
     assert _scalar(con, sql) == 0

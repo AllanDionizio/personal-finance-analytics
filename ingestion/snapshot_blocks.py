@@ -25,6 +25,7 @@ Exemplo de uso::
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from datetime import date, datetime
@@ -68,6 +69,11 @@ _HEADER_SYNONYMS: dict[str, str] = {
     "rendimento atual": "rendimento_atual",
     "rendimento final": "rendimento_final",
 }
+
+
+# Colunas de texto onde pode aparecer o rótulo de uma linha de totalização.
+_LABEL_COLUMNS = ("banco_corretora", "aplicacao")
+_TOTAL_LABEL = re.compile(r"total\s*:?")
 
 
 @dataclass
@@ -138,8 +144,8 @@ def find_snapshot_blocks(ws: Any) -> list[SnapshotBlock]:
 def iter_snapshot_rows(ws: Any, block: SnapshotBlock) -> Iterator[dict[str, Any]]:
     """Itera as linhas de dados de um bloco como dicts com nomes canônicos.
 
-    Pula linhas vazias e linhas de totalização (que começam com "Total"
-    ou similares).
+    Pula linhas vazias e linhas de totalização ("Total:" em qualquer coluna
+    de rótulo, ver ``_is_total_row``).
 
     Args:
         ws: worksheet.
@@ -163,9 +169,7 @@ def iter_snapshot_rows(ws: Any, block: SnapshotBlock) -> Iterator[dict[str, Any]
         if not any_value:
             continue
 
-        # Filtra linhas de totalização (ex.: "Total:" na primeira coluna)
-        first_col_value = ws.cell(row, min(block.header_map.values())).value
-        if first_col_value and "total" in str(first_col_value).lower():
+        if _is_total_row(record):
             continue
 
         yield record
@@ -216,6 +220,19 @@ def _find_header_row(ws: Any, start: int, end: int) -> tuple[int | None, dict[st
         if len(header_map) >= 2:
             return row, header_map
     return None, {}
+
+
+def _is_total_row(record: dict[str, Any]) -> bool:
+    """Linha de totalização: alguma coluna de rótulo contém só "Total" ou "Total:".
+
+    O rótulo não fica sempre na primeira coluna do bloco: no XLSX real o
+    "Total:" está na coluna C (Aplicação), com a B (Banco/Corretora) vazia.
+    """
+    for canonical in _LABEL_COLUMNS:
+        value = record.get(canonical)
+        if isinstance(value, str) and _TOTAL_LABEL.fullmatch(_normalize(value)):
+            return True
+    return False
 
 
 def _match_header(value: Any) -> str | None:
