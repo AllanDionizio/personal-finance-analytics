@@ -75,8 +75,18 @@ _CONFIG_PLACEHOLDER = "-"  # célula vazia/placeholder a ignorar
 # --------------------------------------------------------------------------
 
 _MESES_PREFIX = {
-    "jan", "fev", "mar", "abr", "mai", "jun",
-    "jul", "ago", "set", "out", "nov", "dez",
+    "jan",
+    "fev",
+    "mar",
+    "abr",
+    "mai",
+    "jun",
+    "jul",
+    "ago",
+    "set",
+    "out",
+    "nov",
+    "dez",
 }
 
 
@@ -501,17 +511,13 @@ def _create_schema(con: duckdb.DuckDBPyConnection) -> None:
     con.execute(_DDL)
 
 
-def _reload_transacoes(
-    con: duckdb.DuckDBPyConnection, source_file: str, rows: list[tuple]
-) -> None:
+def _reload_transacoes(con: duckdb.DuckDBPyConnection, source_file: str, rows: list[tuple]) -> None:
     con.execute("DELETE FROM raw.transacoes WHERE source_file = ?", [source_file])
     if rows:
         con.executemany(_INSERT_TRANSACOES, rows)
 
 
-def _reload_snapshots(
-    con: duckdb.DuckDBPyConnection, source_file: str, rows: list[tuple]
-) -> None:
+def _reload_snapshots(con: duckdb.DuckDBPyConnection, source_file: str, rows: list[tuple]) -> None:
     con.execute("DELETE FROM raw.carteira_snapshots WHERE source_file = ?", [source_file])
     if rows:
         con.executemany(_INSERT_SNAPSHOTS, rows)
@@ -539,8 +545,7 @@ def _warn_duplicate_ids(source_file: str, rows: list[tuple]) -> None:
     dups = [tid for tid, c in counts.items() if c > 1]
     if dups:
         log.warning(
-            "  %s: %d transacao_id duplicado(s) (linha com crédito+débito?); "
-            "validar na camada stg",
+            "  %s: %d transacao_id duplicado(s) (linha com crédito+débito?); validar na camada stg",
             source_file,
             len(dups),
         )
