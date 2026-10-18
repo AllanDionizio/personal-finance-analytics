@@ -3,9 +3,9 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "financas-pessoais"
+name = "personal-finance-analytics"
 version = "0.1.0"
-description = "Pipeline de dados para controle financeiro pessoal."
+description = "End-to-end analytics engineering project on household finance data."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
@@ -19,7 +19,8 @@ dependencies = [
 dev = [
     "pytest>=8.0",
     "pytest-cov>=5.0",
-    "ruff>=0.5",
+    "ruff==0.17.1",  # keep in sync with .pre-commit-config.yaml
+    "pre-commit>=4.0",
     "mypy>=1.10",
 ]
 
@@ -29,6 +30,9 @@ packages = ["ingestion"]
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+
+[tool.ruff.format]
+exclude = ["*.md"]  # keep code samples in docs as written
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "SIM", "RUF"]

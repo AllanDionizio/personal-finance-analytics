@@ -1,0 +1,9 @@
+# Committed on purpose: no secrets here, only env var lookups.
+# Local and CI both run on DuckDB.
+personal_finance:
+  target: "{{ env_var('DBT_TARGET', 'duckdb') }}"
+  outputs:
+    duckdb:
+      type: duckdb
+      path: "{{ env_var('DUCKDB_PATH', '../data/warehouse.duckdb') }}"
+      threads: 4
