@@ -1,70 +1,56 @@
-# =============================================================
-# Dados pessoais — NUNCA commitar
-# =============================================================
-data/raw/
-data/*.duckdb
-data/*.duckdb.wal
-data/*.parquet
-data/*.csv
-*.xlsx
-
-# Manter os .gitkeep das pastas vazias
-!data/.gitkeep
-!data/raw/.gitkeep
-
-# =============================================================
 # Python
-# =============================================================
 __pycache__/
 *.py[cod]
-*$py.class
-*.egg-info/
-*.egg
-.Python
-build/
-dist/
 .venv/
 venv/
 env/
-.python-version
-
-# =============================================================
-# Testing / lint cache
-# =============================================================
+*.egg-info/
+build/
+dist/
 .pytest_cache/
+.ruff_cache/
+.mypy_cache/
 .coverage
 .coverage.*
 htmlcov/
-.mypy_cache/
-.ruff_cache/
 
-# =============================================================
-# Ambientes / segredos
-# =============================================================
+# Secrets — never commit
 .env
 .env.*
 !.env.example
+*.json.key
+service-account*.json
+# dbt/profiles.yml IS committed: it only reads credentials from env vars
 
-# =============================================================
-# Editor / SO
-# =============================================================
-.vscode/
-.idea/
-*.swp
-*.swo
+# Data — real data never goes to git; synthetic samples are generated, not committed
+data/raw/*
+!data/raw/.gitkeep
+data/processed/
+*.duckdb
+*.duckdb.wal
+*.parquet
+*.xlsx
+*.csv
+!dbt/seeds/*.csv
+
+# dbt
+dbt/target/
+dbt/dbt_packages/
+dbt/logs/
+logs/
+
+# Evidence
+dashboards/.evidence/
+dashboards/build/
+node_modules/
+
+# Claude Code (local settings only)
+.claude/settings.local.json
+
+# OS / editor
 .DS_Store
 Thumbs.db
-
-# =============================================================
-# dbt (futuro)
-# =============================================================
-dbt_project/target/
-dbt_project/dbt_packages/
-dbt_project/logs/
-
-# =============================================================
-# Evidence (futuro)
-# =============================================================
-dashboard/.evidence/
-dashboard/node_modules/
-dashboard/build/
+.idea/
+.vscode/
+*.swp
+*.swo

@@ -1,94 +1,105 @@
-# Finanças Pessoais
+# personal-finance-analytics
 
-Pipeline de dados para controle financeiro pessoal. Ingere planilhas
-históricas (Google Sheets exportadas como XLSX), normaliza num modelo
-dimensional, e gera dashboards.
+![CI](https://github.com/AllanDionizio/personal-finance-analytics/actions/workflows/ci.yml/badge.svg)
+![dbt](https://img.shields.io/badge/dbt-1.x-orange)
+![Python](https://img.shields.io/badge/python-3.11-blue)
 
-## Stack
+> An end-to-end analytics engineering project that turns six years of household finance spreadsheets into a tested star schema and a self-serve dashboard.
 
-| Camada | Tecnologia |
-|---|---|
-| Ingestão | Python + openpyxl (preserva cor de célula como dado) |
-| Storage | DuckDB (banco file-based, columnar) |
-| Modelagem | dbt com adapter `dbt-duckdb` |
-| Visualização | Evidence.dev |
+🚧 **Work in progress.** Ingestion is done. The dbt models, synthetic dataset and dashboard are being built; see [Roadmap](#roadmap).
 
-Ver `docs/data-model.md` para o design completo da camada de dados.
+## Why this project
 
-## Setup
+For six years, a couple tracked every transaction in yearly Google Sheets workbooks. The sheets work for data entry but can't answer cross-year questions: how fixed costs evolved, how much is still owed in installments, how the investment portfolio grew. Half of the meaning isn't even in the cells: **who spent** and **which card was used** are encoded as cell background colors.
 
-Requer Python 3.11+.
+This project extracts that data, colors included, into DuckDB and models it with dbt so those questions become simple queries.
+
+## Architecture
+
+```mermaid
+flowchart LR
+    A[Source: yearly XLSX exports] --> B[Ingestion: Python + openpyxl]
+    B --> C[(Warehouse: DuckDB)]
+    C --> D[dbt: staging → intermediate → marts]
+    D --> E[BI: Evidence]
+    F[GitHub Actions] -.CI.-> B
+    F -.-> D
+```
+
+## Data model
+
+Planned star schema (full design in [`docs/data-model.md`](docs/data-model.md)):
+
+| Model | Type | Grain | Description |
+| --- | --- | --- | --- |
+| `fct_transactions` | Fact | One row per transaction | Credits and debits, with installment and effective-amount flags |
+| `fct_portfolio_snapshots` | Fact | One row per asset per reference date | Investment portfolio history |
+| `dim_date` | Dimension | One row per day | Generated calendar |
+| `dim_category` | Dimension | One row per category | Category, macro-category (fixed / variable), type |
+| `dim_owner` | Dimension | One row per owner | Derived from cell colors |
+| `dim_payment_method` | Dimension | One row per payment method | Derived from cell colors |
+
+## Data quality
+
+- Python unit tests for every ingestion library (color resolution, installment parsing, snapshot block detection)
+- Planned: generic and custom dbt tests on every key, source freshness, `dbt build` on every pull request
+
+## Tech stack
+
+| Layer | Tool | Why this choice |
+| --- | --- | --- |
+| Ingestion | Python + openpyxl | Reads cell fill colors, which carry business meaning (owner, card) |
+| Warehouse | DuckDB | Zero-infra, file-based, runs the same locally and in CI |
+| Transformation | dbt (`dbt-duckdb`) | Tested, documented, version-controlled SQL |
+| BI | Evidence | Dashboards as code, versioned next to the models |
+| CI | GitHub Actions | Lint, tests and `dbt build` on every pull request |
+
+## How to run
 
 ```bash
-# com uv (recomendado)
-uv sync --all-extras
-
-# com pip
-python -m venv .venv
-source .venv/bin/activate
-pip install -e ".[dev]"
+git clone https://github.com/AllanDionizio/personal-finance-analytics.git
+cd personal-finance-analytics
+python -m venv .venv && source .venv/bin/activate
+make setup
 ```
 
-## Estrutura
-
-```
-financas-pessoais/
-├── docs/
-│   └── data-model.md            # design da camada de dados
-├── ingestion/
-│   ├── extract_sheets.py        # ETL: XLSX → camada raw.* do DuckDB (CLI)
-│   ├── color_resolver.py        # cor de célula (rgb/theme) → dimensão de negócio
-│   ├── parcela_parser.py        # extrai (N/M) da descrição
-│   └── snapshot_blocks.py       # detecta blocos da aba "Situação Atual"
-├── tests/                       # testes unitários e de integração
-├── data/
-│   ├── raw/                     # XLSX de origem (gitignored)
-│   └── financas.duckdb          # banco gerado (gitignored)
-└── pyproject.toml
-```
-
-## Uso
-
-### Ingestão (XLSX → `raw.*`)
-
-Baixe os XLSX de origem para `data/raw/` e rode:
+Run the ingestion against a folder of XLSX workbooks:
 
 ```bash
-python -m ingestion.extract_sheets --xlsx-dir data/raw --db data/financas.duckdb
+python -m ingestion.extract_sheets --xlsx-dir data/raw --db data/warehouse.duckdb
 ```
 
-Idempotente: rerodar sobre os mesmos arquivos não duplica registros (recarga
-por `source_file`). Cores de célula não reconhecidas são logadas com contagem,
-sem falhar a execução. Popula `raw.transacoes`, `raw.carteira_snapshots` e
-`raw.categorias_config`.
+It is idempotent: re-running on the same files reloads by `source_file` without duplicating rows. Unrecognized cell colors are logged with counts instead of failing the run.
 
-### Desenvolvimento
+Once the synthetic dataset lands, `make seed` and `make build` will run the whole pipeline without credentials or real data.
 
-```bash
-# Rodar testes
-pytest
+## Design decisions & trade-offs
 
-# Cobertura
-pytest --cov=ingestion --cov-report=term-missing
-
-# Lint
-ruff check .
-ruff format .
-
-# Type check
-mypy ingestion/
-```
+- **Decision:** keep the raw layer literal (installment suffixes and raw color codes untouched). **Why:** parsing rules can change and be replayed in dbt without re-reading the workbooks. **Trade-off:** the raw tables are not directly queryable for analysis.
+- **Decision:** resolve both `rgb` and `theme` color references. **Why:** Google Sheets exports the same visible color either as a hex value or as a theme index, depending on how it was applied. **Trade-off:** the resolver depends on parsing `xl/theme/theme1.xml` inside each workbook.
+- **Decision:** detect the debit-side layout from the header row instead of fixed positions. **Why:** a column was added in 2022, so 2021 workbooks have a different layout. **Trade-off:** the header detection has to be tested against both layouts.
 
 ## Roadmap
 
-- [x] Design do modelo de dados (`docs/data-model.md`)
-- [x] Lib: `color_resolver` (cor → dono / meio_pagamento)
-- [x] Lib: `parcela_parser` (extração de parcela embutida na descrição)
-- [x] Lib: `snapshot_blocks` (parsing de blocos da Situação Atual)
-- [x] Orquestrador `extract_sheets.py` (Fase 0)
-- [x] Carregamento na camada `raw.*` do DuckDB
-- [ ] Validação manual da carga `raw.*` contra totais da planilha
-- [ ] Modelos dbt staging
-- [ ] Modelos dbt marts (modelo dimensional)
-- [ ] Dashboards Evidence
-- [ ] (Opcional) UI de entrada
+- [x] Data model design
+- [x] Ingestion libraries with unit tests
+- [x] Ingestion CLI: XLSX → `raw.*` in DuckDB
+- [x] Repository standards: CI, pre-commit, lint
+- [ ] Synthetic dataset with the same structure as the real workbooks
+- [ ] dbt staging, intermediate and marts
+- [ ] dbt tests and published dbt docs
+- [ ] Evidence dashboard, deployed on the synthetic data
+
+## Repository structure
+
+```
+├── .github/workflows/   # CI
+├── ingestion/           # Python extract & load
+├── dbt/                 # models, tests, macros, seeds
+├── tests/               # Python unit tests
+└── docs/                # data model design
+```
+
+---
+
+Built by [Allan Dionizio](https://github.com/AllanDionizio) · [LinkedIn](https://www.linkedin.com/in/allandionizio/)
