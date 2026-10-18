@@ -41,6 +41,7 @@ DONO_BY_HEX: dict[str, str] = {
 MEIO_PAGAMENTO_BY_HEX: dict[str, str] = {
     "B4A7D6": "Card A",
     "8E7CC3": "Card B",
+    "9FC5E8": "Card C",
 }
 
 DONO_DEFAULT = "Outros"

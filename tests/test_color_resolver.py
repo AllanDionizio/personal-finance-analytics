@@ -72,6 +72,7 @@ class TestMeioPagamentoFromHex:
             ("8E7CC3", "Card B"),
             ("b4a7d6", "Card A"),
             ("#8e7cc3", "Card B"),
+            ("9FC5E8", "Card C"),
         ],
     )
     def test_cores_conhecidas(self, hex_color: str, esperado: str) -> None:
@@ -84,7 +85,7 @@ class TestMeioPagamentoFromHex:
         assert meio_pagamento_from_hex(None) == MEIO_PAGAMENTO_DEFAULT
 
     def test_mapeamento_canonico(self) -> None:
-        assert set(MEIO_PAGAMENTO_BY_HEX.values()) == {"Card A", "Card B"}
+        assert set(MEIO_PAGAMENTO_BY_HEX.values()) == {"Card A", "Card B", "Card C"}
 
 
 # --------------------------------------------------------------------------
