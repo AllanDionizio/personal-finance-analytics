@@ -105,8 +105,8 @@ Canonical category list: the "Configurações" sheet of the **2026** file.
 | `side` | VARCHAR | `'credit'` / `'debit'` |
 | `description` | VARCHAR | trimmed, `(N/M)` tag removed |
 | `raw_description` | VARCHAR | as typed |
-| `category` | VARCHAR | trimmed; legacy names mapped |
-| `macro_category` | VARCHAR | from raw, or joined from `raw.category_config` (6.4) |
+| `category` | VARCHAR | trimmed |
+| `macro_category` | VARCHAR | from raw, or joined from `stg_categories` (6.4) |
 | `amount` | DECIMAL(12,2) | |
 | `owner` | VARCHAR | credits: `'Person A'` / `'Person B'` / `'Other'` (6.2) |
 | `payment_method` | VARCHAR | debits: `'Card A'` / `'Card B'` / `'Card C'` / `'Other'` |
@@ -127,7 +127,8 @@ inferred `asset_class`.
 
 ### `stg_categories`
 
-`raw.category_config` plus the legacy categories found only in old files.
+`raw.category_config` plus the legacy categories that appear only in old
+files (e.g. `'Farmácia'`, `'Uber'`), each with its macro-category.
 
 ## 4. Marts (planned)
 
@@ -148,7 +149,7 @@ inferred `asset_class`.
 |---|---|---|
 | Sheet (`JAN`) + file year | `budget_month` | month name → number, first day of month |
 | Col B (Descrição) | `raw_description`, `description` | trim; drop `(N/M)` |
-| Col C (Categoria) | `category` | check against `raw.category_config` |
+| Col C (Categoria) | `category` | check against `stg_categories` |
 | Col D (Valor) | `amount` | |
 | **Col D fill color** | `owner` | see 6.2 |
 | Col E (Data) | `transaction_date` | |
@@ -164,7 +165,7 @@ MacroCategoria). The ingestion detects the header at runtime.
 | Source (XLSX) | Target (`stg_transactions`) | Rule |
 |---|---|---|
 | Col I (Descrição) | `description`, `installment_number`, `installment_count` | installment regex (6.1) |
-| Col J (MacroCategoria, 2022+) | `macro_category` | 2021: joined from `raw.category_config` |
+| Col J (MacroCategoria, 2022+) | `macro_category` | 2021: joined from `stg_categories` |
 | Col K/J (Categoria) | `category` | |
 | Col L/K (Valor) | `amount` | |
 | **Col I or amount fill color** | `payment_method` | see 6.2 |
@@ -257,8 +258,9 @@ month's sheet, and each installment on a later one, so the two differ often.
 ### 6.4 Macro-category for 2021
 
 The column doesn't exist in 2021. Join `category` against
-`raw.category_config`; categories missing from the config (legacy names)
-get `'Unknown'` and are listed by a dbt test.
+`stg_categories`, which covers the canonical list and the legacy names.
+A category that still doesn't match gets `'Unknown'` and is flagged by a
+dbt test, so a new category typed in the sheet gets noticed.
 
 ### 6.5 `transaction_id` (idempotency)
 

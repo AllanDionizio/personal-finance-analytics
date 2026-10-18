@@ -7,7 +7,7 @@ Reads every ``.xlsx`` in ``--xlsx-dir`` and loads three tables:
   debit side of the month sheets), with cell colors kept as raw data.
 - ``raw.portfolio_snapshots`` — historical snapshots from the "Situação
   Atual" sheet.
-- ``raw.category_config``     — the canonical category list (newest file only).
+- ``raw.category_config``     — the canonical category list (2026 file only).
 
 Raw layer principles (see ``docs/data-model.md``):
 
