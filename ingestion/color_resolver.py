@@ -1,17 +1,18 @@
 """
-Resolve cores de células das planilhas e mapeia pra dimensões de negócio.
+Resolve spreadsheet cell colors and map them to business dimensions.
 
-As planilhas de origem usam cor de célula como marcador semântico:
-- Cor na célula de valor de entrada (col D) codifica o DONO do crédito.
-- Cor na célula de descrição/valor de saída (col I ou col valor) codifica
-  o MEIO DE PAGAMENTO (cartão usado).
+The source workbooks use cell background color as meaning:
 
-Quirk do Google Sheets: ao exportar XLSX, algumas cores ficam como `rgb`
-(hex direto, ex. `FF4BACC6`) e outras como `theme` (referência ao tema do
-workbook, ex. `theme=9`). Este módulo unifica os dois casos consultando
-o `xl/theme/theme1.xml` quando necessário.
+- The color of a credit's amount cell (column D) encodes the **owner**.
+- The color of a debit's description or amount cell encodes the
+  **payment method** (which card was used).
 
-Mapeamento fixado em conversa de design (ver `docs/data-model.md`).
+Google Sheets quirk: when exported to XLSX, some fills are stored as ``rgb``
+(a literal hex such as ``FF4BACC6``) and others as ``theme`` (an index into
+the workbook theme, such as ``theme=9``). This module resolves both by
+reading ``xl/theme/theme1.xml`` when needed.
+
+The mapping is documented in ``docs/data-model.md``.
 """
 
 from __future__ import annotations
@@ -26,67 +27,66 @@ OOXML_DRAWINGML_NS = "http://schemas.openxmlformats.org/drawingml/2006/main"
 
 
 # --------------------------------------------------------------------------
-# Mapeamento canônico (descoberto via inspeção dos XLSX)
+# Canonical mapping (found by inspecting the workbooks)
 # --------------------------------------------------------------------------
 
-#: Hex resolvido (6 chars, sem alpha, uppercase) → dono.
-DONO_BY_HEX: dict[str, str] = {
+#: Resolved hex (6 chars, no alpha, uppercase) → owner.
+OWNER_BY_HEX: dict[str, str] = {
     "4BACC6": "Person A",
     "F79646": "Person B",
-    "FFFFFF": "Outros",
-    "000000": "Outros",
+    "FFFFFF": "Other",
+    "000000": "Other",
 }
 
-#: Hex resolvido → meio de pagamento.
-MEIO_PAGAMENTO_BY_HEX: dict[str, str] = {
+#: Resolved hex → payment method.
+PAYMENT_METHOD_BY_HEX: dict[str, str] = {
     "B4A7D6": "Card A",
     "8E7CC3": "Card B",
     "9FC5E8": "Card C",
 }
 
-DONO_DEFAULT = "Outros"
-MEIO_PAGAMENTO_DEFAULT = "Outro"
+OWNER_DEFAULT = "Other"
+PAYMENT_METHOD_DEFAULT = "Other"
 
 
 # --------------------------------------------------------------------------
-# Paleta do tema
+# Theme palette
 # --------------------------------------------------------------------------
 
 
 def load_theme_palette(xlsx_path: str | Path) -> list[str | None]:
-    """Lê `xl/theme/theme1.xml` do XLSX e retorna a paleta como lista de hex.
+    """Read ``xl/theme/theme1.xml`` from the XLSX and return its palette as hex.
 
-    Cada posição da lista corresponde ao índice de tema usado pelas células
-    quando `fill.start_color.type == 'theme'`.
+    Each position matches the theme index cells use when
+    ``fill.start_color.type == 'theme'``.
 
-    Itens são strings hex de 6 chars (sem alpha, uppercase) ou `None` quando
-    a entrada não pôde ser resolvida estaticamente (ex.: cor de sistema sem
-    `lastClr`).
+    Items are 6-char hex strings (no alpha, uppercase), or ``None`` when an
+    entry can't be resolved statically (e.g. a system color without
+    ``lastClr``).
 
-    Importante: a ordem dos índices no OOXML não é puramente sequencial —
-    `dk1` e `lt1` aparecem **trocados** entre si em relação a `dk2/lt2`
-    em alguns templates. Esta função preserva a ordem em que aparecem no
-    XML, que é a mesma ordem usada por openpyxl quando reporta
-    `start_color.value` para `type='theme'`.
+    Note: OOXML index order is not purely sequential; in some templates
+    ``dk1``/``lt1`` are swapped relative to ``dk2``/``lt2``. This function
+    keeps the order of the XML, which is the order openpyxl uses when it
+    reports ``start_color.value`` for ``type='theme'``.
 
     Args:
-        xlsx_path: caminho pra um arquivo .xlsx.
+        xlsx_path: path to an .xlsx file.
 
     Returns:
-        Lista de strings hex (uppercase, sem alpha) ou None.
+        List of hex strings (uppercase, no alpha) or None.
 
     Raises:
-        FileNotFoundError: se o xlsx não existe ou não tem `theme1.xml`.
+        FileNotFoundError: if the xlsx doesn't exist or has no ``theme1.xml``.
     """
     path = Path(xlsx_path)
     if not path.exists():
-        raise FileNotFoundError(f"XLSX não encontrado: {path}")
+        raise FileNotFoundError(f"XLSX not found: {path}")
 
     with zipfile.ZipFile(path) as z:
         try:
             theme_bytes = z.read("xl/theme/theme1.xml")
         except KeyError as e:
-            raise FileNotFoundError(f"theme1.xml ausente em {path}") from e
+            raise FileNotFoundError(f"theme1.xml missing in {path}") from e
 
     tree = ET.fromstring(theme_bytes)
     ns = {"a": OOXML_DRAWINGML_NS}
@@ -110,43 +110,42 @@ def load_theme_palette(xlsx_path: str | Path) -> list[str | None]:
 
 
 # --------------------------------------------------------------------------
-# Resolução de cor da célula
+# Cell color resolution
 # --------------------------------------------------------------------------
 
 
 @dataclass(frozen=True)
 class ResolvedColor:
-    """Resultado da resolução de cor de uma célula."""
+    """Result of resolving a cell's color."""
 
     hex: str | None
-    """Hex normalizado em 6 chars uppercase, ou None se sem cor / não resolvido."""
+    """Normalized 6-char uppercase hex, or None if no color / unresolved."""
 
     source_type: str | None
-    """`'rgb'`, `'theme'`, ou None."""
+    """``'rgb'``, ``'theme'``, or None."""
 
     has_unresolved_tint: bool = False
-    """True se a célula tinha `tint != 0`, que este módulo não interpreta."""
+    """True if the cell had ``tint != 0``, which this module doesn't apply."""
 
 
 def resolve_cell_color(
     cell: Any,
     theme_palette: list[str | None],
 ) -> ResolvedColor:
-    """Resolve a cor de fundo (`fill.start_color`) de uma célula openpyxl.
+    """Resolve the background color (``fill.start_color``) of an openpyxl cell.
 
     Args:
-        cell: célula openpyxl (`openpyxl.cell.cell.Cell`).
-        theme_palette: paleta retornada por `load_theme_palette` do mesmo workbook.
+        cell: openpyxl cell (``openpyxl.cell.cell.Cell``).
+        theme_palette: palette from ``load_theme_palette`` for the same workbook.
 
     Returns:
-        ResolvedColor com hex normalizado ou None.
+        ResolvedColor with a normalized hex, or None.
 
-    Notas sobre tint:
-        Quando `type='theme'`, OOXML permite um modificador `tint` (-1.0..1.0)
-        que escurece (negativo) ou clareia (positivo) a cor base. Nas
-        planilhas de origem o tint é sempre 0.0, então este módulo ignora
-        e apenas sinaliza via `has_unresolved_tint=True` se encontrar tint
-        diferente de zero (pra debug futuro).
+    Note on tint:
+        With ``type='theme'``, OOXML allows a ``tint`` modifier (-1.0..1.0)
+        that darkens (negative) or lightens (positive) the base color. The
+        source workbooks always use tint 0.0, so this module ignores it and
+        only flags a non-zero tint via ``has_unresolved_tint=True``.
     """
     if cell is None or cell.fill is None:
         return ResolvedColor(None, None)
@@ -163,7 +162,7 @@ def resolve_cell_color(
         if value is None:
             return ResolvedColor(None, "rgb", has_tint)
         hex_value = str(value).upper()
-        # Remover canal alpha quando presente (FFRRGGBB → RRGGBB)
+        # Drop the alpha channel when present (FFRRGGBB → RRGGBB)
         if len(hex_value) == 8:
             hex_value = hex_value[2:]
         elif len(hex_value) != 6:
@@ -179,42 +178,42 @@ def resolve_cell_color(
             return ResolvedColor(theme_palette[idx], "theme", has_tint)
         return ResolvedColor(None, "theme", has_tint)
 
-    # type='indexed', 'auto' etc — não usados nos arquivos de origem
+    # type='indexed', 'auto' etc. are not used in the source files
     return ResolvedColor(None, color.type, has_tint)
 
 
 # --------------------------------------------------------------------------
-# Mapeamento hex → dimensão de negócio
+# Hex → business dimension
 # --------------------------------------------------------------------------
 
 
-def dono_from_hex(hex_color: str | None) -> str:
-    """Mapeia hex resolvido pra dono. Retorna `'Outros'` se não reconhecer.
+def owner_from_hex(hex_color: str | None) -> str:
+    """Map a resolved hex to an owner; ``'Other'`` if unknown.
 
-    Aceita None e qualquer caso (lowercase / uppercase / com ou sem `#`).
+    Accepts None and any case, with or without ``#``.
     """
     if hex_color is None:
-        return DONO_DEFAULT
+        return OWNER_DEFAULT
     normalized = hex_color.lstrip("#").upper()
-    return DONO_BY_HEX.get(normalized, DONO_DEFAULT)
+    return OWNER_BY_HEX.get(normalized, OWNER_DEFAULT)
 
 
-def meio_pagamento_from_hex(hex_color: str | None) -> str:
-    """Mapeia hex resolvido pra meio de pagamento. Retorna `'Outro'` se não reconhecer.
+def payment_method_from_hex(hex_color: str | None) -> str:
+    """Map a resolved hex to a payment method; ``'Other'`` if unknown.
 
-    Aceita None e qualquer caso.
+    Accepts None and any case, with or without ``#``.
     """
     if hex_color is None:
-        return MEIO_PAGAMENTO_DEFAULT
+        return PAYMENT_METHOD_DEFAULT
     normalized = hex_color.lstrip("#").upper()
-    return MEIO_PAGAMENTO_BY_HEX.get(normalized, MEIO_PAGAMENTO_DEFAULT)
+    return PAYMENT_METHOD_BY_HEX.get(normalized, PAYMENT_METHOD_DEFAULT)
 
 
-def resolve_dono(cell: Any, theme_palette: list[str | None]) -> str:
-    """Atalho: célula → dono. Combina `resolve_cell_color` + `dono_from_hex`."""
-    return dono_from_hex(resolve_cell_color(cell, theme_palette).hex)
+def resolve_owner(cell: Any, theme_palette: list[str | None]) -> str:
+    """Shortcut: cell → owner. Combines ``resolve_cell_color`` + ``owner_from_hex``."""
+    return owner_from_hex(resolve_cell_color(cell, theme_palette).hex)
 
 
-def resolve_meio_pagamento(cell: Any, theme_palette: list[str | None]) -> str:
-    """Atalho: célula → meio de pagamento."""
-    return meio_pagamento_from_hex(resolve_cell_color(cell, theme_palette).hex)
+def resolve_payment_method(cell: Any, theme_palette: list[str | None]) -> str:
+    """Shortcut: cell → payment method."""
+    return payment_method_from_hex(resolve_cell_color(cell, theme_palette).hex)

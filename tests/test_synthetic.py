@@ -58,14 +58,14 @@ def test_2021_layout_has_no_macro_category(synthetic_dir: Path) -> None:
     layout = detect_month_layout(_workbook(synthetic_dir, 2021)["JAN"])
     assert layout is not None
     assert layout.header_row == 15
-    assert "macrocategoria" not in layout.debit
+    assert "macro_category" not in layout.debit
 
 
 def test_later_layout_has_macro_category(synthetic_dir: Path) -> None:
     layout = detect_month_layout(_workbook(synthetic_dir, 2026)["JAN"])
     assert layout is not None
     assert layout.header_row == 18
-    assert "macrocategoria" in layout.debit
+    assert "macro_category" in layout.debit
 
 
 @pytest.mark.parametrize("as_of", [date(FIRST_YEAR - 1, 12, 31), date(LAST_YEAR + 1, 1, 1)])
@@ -114,7 +114,7 @@ def test_legacy_categories_only_in_old_years(generator: Generator) -> None:
 def test_portfolio_sheet_is_cumulative(synthetic_dir: Path) -> None:
     for year in range(2022, LAST_YEAR + 1):
         blocks = find_snapshot_blocks(_workbook(synthetic_dir, year)["Situação Atual"])
-        dates = [b.data_referencia for b in blocks]
+        dates = [b.reference_date for b in blocks]
         assert dates[0] == date(2022, 8, 25)
         assert max(dates) <= min(date(year, 12, 31), DEFAULT_AS_OF)
 

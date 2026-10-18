@@ -1,313 +1,226 @@
-# Modelo de Dados — Controle Financeiro Pessoal
+# Data model
 
-> Design doc da camada de dados. Cobre arquitetura, schema completo (DDL),
-> mapeamento dos campos das planilhas atuais para o novo modelo, regras de
-> transformação e decisões fixadas.
->
-> **Versão:** 2 (decisões fixadas em conversa)
-> **Stack:** Python (ingestão) → DuckDB (storage) → dbt (modelagem) → Evidence.dev (dashboards)
+Design doc for the data layer: architecture, the raw tables the ingestion
+loads, the planned staging and marts models, how each source field maps into
+them, and the transformation rules and decisions behind them.
 
-## 1. Arquitetura em camadas
+**Stack:** Python (ingestion) → DuckDB (storage) → dbt (modeling) → Evidence (dashboards)
+
+## 1. Layers
 
 ```
-XLSX (Google Drive)
+XLSX workbooks (one per year, exported from Google Sheets)
        │
        ▼
-  raw.*           ← extract literal das planilhas (Python + openpyxl)
+  raw.*           ← literal extract (Python + openpyxl)
        │
        ▼
-  stg.*           ← cleaning, typing, parsing de parcela, mapeamento de cor (dbt)
+  staging         ← cleaning, typing, installment parsing, color mapping (dbt)
        │
        ▼
-  marts.*         ← modelo dimensional (dbt)
+  marts           ← star schema (dbt)
        │
        ▼
-  Evidence.dev    ← dashboards
+  Evidence        ← dashboards
 ```
 
-- **Banco**: DuckDB (arquivo único `data/financas.duckdb`)
-- **Transformações**: dbt com adapter `dbt-duckdb`
-- **Ingestão**: script Python (`ingestion/extract_sheets.py`)
-- **Visualização**: Evidence.dev consumindo DuckDB direto
+- **Database**: DuckDB, a single file (`data/warehouse.duckdb`)
+- **Transformations**: dbt with the `dbt-duckdb` adapter
+- **Ingestion**: `python -m ingestion.extract_sheets`
+- **Dashboards**: Evidence reading DuckDB directly
 
-## 2. Camada Raw
+Naming: everything this project names (tables, columns, flags) is English.
+Values copied from the workbooks stay as typed in the Portuguese source
+(`'Sim'`, `'Mercado'`, `'Fixo'`); staging maps the ones that drive logic.
 
-Captura literal do XLSX, **sem transformação**, com proveniência preservada.
+## 2. Raw layer
 
-### `raw.transacoes`
+Literal capture of the XLSX, **no transformation**, with provenance kept.
+Each file reloads with `DELETE WHERE source_file = ?` + `INSERT`, so re-runs
+are idempotent.
 
-| Coluna | Tipo | Descrição |
+### `raw.transactions`
+
+One row per side (credit or debit) of each non-empty month-sheet row.
+
+| Column | Type | Description |
 |---|---|---|
-| `source_file` | VARCHAR | `'2026.xlsx'` |
+| `transaction_id` | VARCHAR | `sha256(source_file\|source_sheet\|source_row\|side)[:16]`, see 6.5 |
+| `source_file` | VARCHAR | e.g. `'Planilha_de_Gastos_Financeiros 2026.xlsx'` |
 | `source_sheet` | VARCHAR | `'JAN'`, `'FEV'`, ... |
-| `source_row` | INTEGER | nº da linha no XLSX |
-| `extracted_at` | TIMESTAMP | quando rodou a ETL |
-| `tipo_raw` | VARCHAR | `'credito'` ou `'debito'` |
-| `descricao_raw` | VARCHAR | texto cru com sufixo `(N/M)` |
-| `categoria_raw` | VARCHAR | texto cru |
-| `macrocategoria_raw` | VARCHAR | NULL para arquivos pré-2026 |
-| `valor_raw` | DECIMAL(12,2) | |
-| `data_raw` | DATE | data original da compra |
-| `status_ok_raw` | VARCHAR | `'Sim'` ou `'Não'` |
-| `cor_descricao_tipo` | VARCHAR | `'rgb'` ou `'theme'` |
-| `cor_descricao_valor` | VARCHAR | hex ARGB ou índice de tema |
-| `cor_valor_tipo` | VARCHAR | redundância pra validação |
-| `cor_valor_valor` | VARCHAR | redundância |
+| `source_row` | INTEGER | row number in the sheet |
+| `extracted_at` | TIMESTAMP | when the ingestion ran |
+| `side` | VARCHAR | `'credit'` or `'debit'` |
+| `description` | VARCHAR | raw text, `(N/M)` tag included |
+| `category` | VARCHAR | raw text |
+| `macro_category` | VARCHAR | NULL in 2021 files (column didn't exist) |
+| `amount` | DECIMAL(12,2) | |
+| `transaction_date` | DATE | original purchase date |
+| `status` | VARCHAR | `'Sim'` or `'Não'` (paid / not yet) |
+| `description_color_type` | VARCHAR | `'rgb'` or `'theme'` |
+| `description_color_value` | VARCHAR | ARGB hex or theme index |
+| `amount_color_type` | VARCHAR | same, for the amount cell |
+| `amount_color_value` | VARCHAR | |
 
-### `raw.carteira_snapshots`
+### `raw.portfolio_snapshots`
 
-| Coluna | Tipo |
+One row per holding per snapshot block of the "Situação Atual" sheet. Every
+year's file repeats the whole history, so the same snapshot appears in
+several files; staging deduplicates (see 6.8).
+
+| Column | Type |
 |---|---|
-| `source_file`, `source_block_start_row`, `extracted_at` | metadados |
-| `data_referencia` | DATE |
-| `banco_corretora` | VARCHAR |
-| `aplicacao` | VARCHAR |
-| `valor_bruto` | DECIMAL(12,2) |
-| `alocacao_pct` | DECIMAL(8,6) |
-| `vencimento` | DATE (NULL para `'N/A'`) |
+| `source_file`, `source_block_row`, `extracted_at` | provenance |
+| `reference_date` | DATE |
+| `bank` | VARCHAR |
+| `asset` | VARCHAR |
+| `gross_value` | DECIMAL(12,2) |
+| `allocation_pct` | DECIMAL(8,6) |
+| `maturity_date` | DATE (NULL for `'N/A'`) |
 | `mom`, `yoy` | DECIMAL(10,6) |
-| `valor_liquido_final`, `rendimento_atual`, `rendimento_final` | DECIMAL |
+| `net_value_at_maturity` | DECIMAL(12,2) |
+| `return_to_date`, `return_at_maturity` | DECIMAL(18,6) |
 
-Implementação: ETL detecta blocos procurando células `'Data Referência'` e itera até a próxima ou até o fim da aba. Importar **todos os snapshots históricos** (decisão fixada).
+Columns that a block doesn't have yet (they were added over time) are NULL.
 
-### `raw.categorias_config`
+### `raw.category_config`
 
-Fonte canônica: aba "Configurações" do arquivo **2026** (decisão fixada).
+Canonical category list: the "Configurações" sheet of the **2026** file.
 
-| Coluna | Tipo |
+| Column | Type |
 |---|---|
-| `tipo` | `'receita'` ou `'despesa'` |
-| `categoria` | VARCHAR |
-| `macrocategoria` | `'Fixo'`, `'Variável'`, `'n/a'` (só pra despesa) |
+| `category_type` | `'income'` or `'expense'` |
+| `category` | VARCHAR |
+| `macro_category` | `'Fixo'`, `'Variável'`, `'n/a'` (expenses only) |
 
-## 3. Camada Staging
+## 3. Staging (planned)
 
-### `stg.transacoes`
+### `stg_transactions`
 
-```sql
-CREATE TABLE stg.transacoes (
-    transacao_id VARCHAR PRIMARY KEY,
-        -- hash(source_file || source_sheet || source_row)
-
-    -- temporal
-    data_transacao DATE,
-        -- data original da compra (pode ser de anos atrás se parcela)
-    data_competencia DATE,
-        -- primeiro dia do mês da aba: JAN 2026 → 2026-01-01
-    ano_competencia INTEGER,
-    mes_competencia INTEGER,
-
-    -- transação
-    tipo VARCHAR,                       -- 'credito' | 'debito'
-    descricao VARCHAR,                  -- limpa, sem sufixo de parcela
-    descricao_original VARCHAR,         -- raw, com sufixo
-    categoria VARCHAR,
-    macrocategoria VARCHAR,             -- inferida pra <2026 via join com config
-    valor DECIMAL(12,2),
-
-    -- dimensões derivadas de cor (mapeamento normalizado rgb+theme)
-    dono VARCHAR,                       -- 'Person A' | 'Person B' | 'Outros'
-    meio_pagamento VARCHAR,             -- 'Card A' | 'Card B' | 'Card C' | 'Outro'
-
-    -- flags
-    status_ok BOOLEAN,                  -- 'Sim' → true, 'Não' → false
-    eh_efetivo BOOLEAN,                 -- status_ok AND categoria <> 'Investimento'
-    eh_provento BOOLEAN,                -- tipo='credito' AND categoria='Proventos'
-    eh_aporte_investimento BOOLEAN,     -- tipo='debito' AND categoria='Investimento'
-    eh_ajuste_fatura BOOLEAN,           -- categoria='Cartão de Crédito' (raro: desconto antecipação, cashback de pontos)
-
-    -- parcela
-    parcela_num INTEGER,                -- 7
-    parcela_total INTEGER,              -- 12
-    eh_parcelada BOOLEAN,               -- parcela_total > 1
-
-    -- proveniência
-    source_file VARCHAR,
-    source_sheet VARCHAR,
-    source_row INTEGER
-);
-```
-
-## 4. Camada Marts (modelo dimensional)
-
-### `marts.dim_data`
-
-Gerada por SQL (não vem das planilhas). Cobertura: 2020-01-01 a 2030-12-31.
-
-```sql
-CREATE TABLE marts.dim_data (
-    data_key DATE PRIMARY KEY,
-    ano INTEGER, mes INTEGER, dia INTEGER,
-    trimestre INTEGER, semestre INTEGER,
-    nome_mes VARCHAR,                   -- 'Janeiro'
-    nome_dia_semana VARCHAR,
-    dia_semana INTEGER,                 -- 1=segunda
-    eh_fim_de_semana BOOLEAN,
-    primeiro_dia_mes DATE,
-    ultimo_dia_mes DATE
-);
-```
-
-### `marts.dim_categoria`
-
-```sql
-CREATE TABLE marts.dim_categoria (
-    categoria_key VARCHAR PRIMARY KEY,  -- 'CAT_DESP_MERCADO'
-    categoria VARCHAR,                  -- 'Mercado'
-    macrocategoria VARCHAR,             -- 'Fixo' | 'Variável' | 'n/a'
-    tipo VARCHAR                        -- 'receita' | 'despesa'
-);
-```
-
-### `marts.dim_dono`
-
-```sql
-CREATE TABLE marts.dim_dono (
-    dono_key VARCHAR PRIMARY KEY,
-    dono VARCHAR,                       -- 'Person A' | 'Person B' | 'Outros'
-    cor_origem VARCHAR                  -- '#4BACC6'
-);
-```
-
-### `marts.dim_meio_pagamento`
-
-```sql
-CREATE TABLE marts.dim_meio_pagamento (
-    meio_pagamento_key VARCHAR PRIMARY KEY,
-    meio_pagamento VARCHAR,             -- 'Card A' | 'Card B' | 'Card C' | 'Outro'
-    tipo VARCHAR,                       -- 'cartao_credito' | 'outro'
-    cor_origem VARCHAR
-);
-```
-
-### `marts.fct_transacao`
-
-```sql
-CREATE TABLE marts.fct_transacao (
-    transacao_id VARCHAR PRIMARY KEY,
-
-    -- FKs
-    data_transacao_key DATE,
-    data_competencia_key DATE,
-    categoria_key VARCHAR,
-    dono_key VARCHAR,
-    meio_pagamento_key VARCHAR,
-
-    -- atributos
-    descricao VARCHAR,
-    tipo VARCHAR,
-
-    -- medidas
-    valor DECIMAL(12,2),
-    valor_efetivo DECIMAL(12,2),        -- valor se eh_efetivo else 0
-
-    -- flags
-    status_ok BOOLEAN,
-    eh_efetivo BOOLEAN,
-    eh_provento BOOLEAN,
-    eh_aporte_investimento BOOLEAN,
-    eh_ajuste_fatura BOOLEAN,
-    eh_parcelada BOOLEAN,
-    parcela_num INTEGER,
-    parcela_total INTEGER
-);
-```
-
-### `marts.fct_carteira_snapshot`
-
-```sql
-CREATE TABLE marts.fct_carteira_snapshot (
-    snapshot_id VARCHAR PRIMARY KEY,    -- hash(data_referencia || aplicacao)
-    data_referencia_key DATE,
-    banco_corretora VARCHAR,
-    aplicacao VARCHAR,
-    classe_ativo VARCHAR,               -- inferida: 'FII' | 'RF' | 'FIM' | 'Cripto' | 'Caixa' | 'Outro'
-    valor_bruto DECIMAL(12,2),
-    alocacao_pct DECIMAL(8,6),
-    vencimento DATE,
-    mom DECIMAL(10,6),
-    yoy DECIMAL(10,6)
-);
-```
-
-## 5. Mapeamento XLSX → Modelo
-
-### Aba mensal — lado CRÉDITOS
-
-| Origem (XLSX) | Destino (stg.transacoes) | Transformação |
+| Column | Type | Rule |
 |---|---|---|
-| Aba (`JAN`) + arquivo (`2026.xlsx`) | `ano_competencia`, `mes_competencia`, `data_competencia` | nome do mês → número; primeiro dia do mês |
-| Col B (Descrição) | `descricao_original`, `descricao` | trim; remover sufixo `(N/M)` |
-| Col C (Categoria) | `categoria` | validar contra `raw.categorias_config` |
-| Col D (Valor) | `valor` | manter decimal |
-| **Cor da col D** | `dono` | ver seção 6.2 |
-| Col E (Data) | `data_transacao` | |
-| Col F (OK) | `status_ok` | `'Sim'` → true |
-| Col G (calculado) | descartar | |
-| — | `tipo` = `'credito'`, `meio_pagamento` = NULL | |
+| `transaction_id` | VARCHAR | from raw |
+| `transaction_date` | DATE | original purchase date (years back for an installment) |
+| `budget_month` | DATE | first day of the sheet's month: `JAN` in the 2026 file → `2026-01-01` |
+| `side` | VARCHAR | `'credit'` / `'debit'` |
+| `description` | VARCHAR | trimmed, `(N/M)` tag removed |
+| `raw_description` | VARCHAR | as typed |
+| `category` | VARCHAR | trimmed |
+| `macro_category` | VARCHAR | from raw, or joined from `stg_categories` (6.4) |
+| `amount` | DECIMAL(12,2) | |
+| `owner` | VARCHAR | credits: `'Person A'` / `'Person B'` / `'Other'` (6.2) |
+| `payment_method` | VARCHAR | debits: `'Card A'` / `'Card B'` / `'Card C'` / `'Other'` |
+| `is_settled` | BOOLEAN | `status = 'Sim'` |
+| `is_effective` | BOOLEAN | settled and not an investment contribution |
+| `is_dividend` | BOOLEAN | credit with category `'Proventos'` |
+| `is_investment_contribution` | BOOLEAN | debit with category `'Investimento'` |
+| `is_card_adjustment` | BOOLEAN | category `'Cartão de Crédito'` (6.7) |
+| `installment_number` | INTEGER | 7 in `(7/12)`, else 1 |
+| `installment_count` | INTEGER | 12 in `(7/12)`, else 1 |
+| `is_installment` | BOOLEAN | `installment_count > 1` |
+| `source_file`, `source_sheet`, `source_row` | | provenance |
 
-### Aba mensal — lado DÉBITOS
+### `stg_portfolio_snapshots`
 
-Posições mudam entre 2021 (I–N) e 2022+ (I–O por causa de MacroCategoria).
-ETL detecta header dinamicamente.
+Typed and deduplicated across files (6.8), with `bank` trimmed and an
+inferred `asset_class`.
 
-| Origem (XLSX) | Destino (stg.transacoes) | Transformação |
+### `stg_categories`
+
+`raw.category_config` plus the legacy categories that appear only in old
+files (e.g. `'Farmácia'`, `'Uber'`), each with its macro-category.
+
+## 4. Marts (planned)
+
+| Model | Grain | Key columns |
 |---|---|---|
-| Col I (Descrição) | `descricao`, `parcela_num`, `parcela_total` | regex de parcela (seção 6.1) |
-| Col J (MacroCategoria, só 2026) | `macrocategoria` | pré-2026: inferir via join `categorias_config` |
-| Col K/J (Categoria) | `categoria` | |
-| Col L/K (Valor) | `valor` | |
-| **Cor da col I ou da col valor** | `meio_pagamento` | ver seção 6.2 |
-| Col M/L (Data) | `data_transacao` | |
-| Col N/M (OK) | `status_ok` | |
-| — | `tipo` = `'debito'` | |
+| `dim_date` | one row per day, 2020-01-01 to 2030-12-31 | `date_day`, year, month, quarter, month name, weekday, is_weekend, first/last day of month |
+| `dim_category` | one row per category and type | `category_key`, `category`, `macro_category`, `category_type` |
+| `dim_owner` | one row per owner | `owner_key`, `owner`, `source_color` (`'#4BACC6'`) |
+| `dim_payment_method` | one row per payment method | `payment_method_key`, `payment_method`, `method_type` (`'credit_card'` / `'other'`), `source_color` |
+| `fct_transactions` | one row per transaction | `transaction_id`; FKs to the dims for `transaction_date`, `budget_month`, category, owner, payment method; `amount`, `effective_amount` (amount if effective, else 0); the flags and installment columns of staging |
+| `fct_portfolio_snapshots` | one row per asset per reference date | `snapshot_id` (`hash(reference_date\|bank\|asset)`), `reference_date`, `bank`, `asset`, `asset_class` (`'Real estate fund'` / `'Fixed income'` / `'Multimarket fund'` / `'Crypto'` / `'Cash'` / `'Other'`), `gross_value`, `allocation_pct`, `maturity_date`, `mom`, `yoy` |
 
-### Aba "Situação Atual" → `raw.carteira_snapshots`
+## 5. Source → model mapping
 
-Estrutura: blocos repetidos separados por `Data Referência:`. ETL:
-1. Lê toda a aba
-2. Encontra todas as linhas com `'Data Referência'`
-3. Para cada `Data Referência`, lê o header do bloco (linha seguinte) e itera até a próxima `Data Referência` ou fim
-4. Pula linhas-resumo (`Total:` etc.)
-5. Headers podem variar entre snapshots — usar nome da coluna do header do bloco, não posição fixa
+### Month sheet: credit side
 
-### Aba "Configurações" → `raw.categorias_config`
+| Source (XLSX) | Target (`stg_transactions`) | Rule |
+|---|---|---|
+| Sheet (`JAN`) + file year | `budget_month` | month name → number, first day of month |
+| Col B (Descrição) | `raw_description`, `description` | trim; drop `(N/M)` |
+| Col C (Categoria) | `category` | check against `stg_categories` |
+| Col D (Valor) | `amount` | |
+| **Col D fill color** | `owner` | see 6.2 |
+| Col E (Data) | `transaction_date` | |
+| Col F (OK) | `is_settled` | `'Sim'` → true |
+| Col G (computed) | dropped | |
+| — | `side = 'credit'`, `payment_method` NULL | |
 
-Só do arquivo **2026.xlsx**:
-- Col I (linhas 4–38) → receitas
-- Col J (linhas 4–38) → despesas
-- Col K (linhas 4–38) → macrocategoria (alinhada com col J)
+### Month sheet: debit side
 
-Filtrar linhas com valor `'-'` (placeholder vazio).
+Positions differ between 2021 (I–N) and 2022+ (I–O, because of
+MacroCategoria). The ingestion detects the header at runtime.
 
-## 6. Regras de transformação críticas
+| Source (XLSX) | Target (`stg_transactions`) | Rule |
+|---|---|---|
+| Col I (Descrição) | `description`, `installment_number`, `installment_count` | installment regex (6.1) |
+| Col J (MacroCategoria, 2022+) | `macro_category` | 2021: joined from `stg_categories` |
+| Col K/J (Categoria) | `category` | |
+| Col L/K (Valor) | `amount` | |
+| **Col I or amount fill color** | `payment_method` | see 6.2 |
+| Col M/L (Data) | `transaction_date` | |
+| Col N/M (OK) | `is_settled` | |
+| — | `side = 'debit'` | |
 
-### 6.1 Parcela embutida na descrição
+### "Situação Atual" sheet → `raw.portfolio_snapshots`
 
-Regex `\((\d+)/(\d+)\)` global. Casos:
+Stacked blocks, each opened by a `Data Referência:` marker. The ingestion:
 
-- `'Telha Norte (7/10)'` → descricao=`'Telha Norte'`, 7/10
-- `'Amazon (4/4) - Smart Lock'` → descricao=`'Amazon - Smart Lock'`, 4/4
-- `'Mercado'` → descricao=`'Mercado'`, parcela_num=1, parcela_total=1, eh_parcelada=false
+1. finds every row with a `Data Referência` marker
+2. for each, finds the block's header row and reads until the next marker
+3. maps headers by name, not position, since columns were added over time
+4. skips empty rows and total rows (`Total:` in any label column)
+5. skips blocks without a table header (the first snapshot was free text)
 
-Normalizar espaços duplos depois da remoção.
+### "Configurações" sheet → `raw.category_config`
 
-### 6.2 Resolução de cores (rgb + theme)
+2026 file only:
 
-**Quirk descoberto na investigação**: o Google Sheets exporta algumas cores
-como `type='rgb'` (hex direto, ex `FF4BACC6`) e outras como `type='theme'`
-(referência ao tema do workbook, ex `theme=9, tint=0.0`). A ETL precisa
-resolver os dois casos.
+- Col I (rows 4–38) → income categories
+- Col J (rows 4–38) → expense categories
+- Col K (rows 4–38) → macro-category, aligned with col J
 
-**Resolução de tema**: parsear `xl/theme/theme1.xml` do XLSX. Para o
-template usado, o color scheme é:
+Rows holding the `'-'` placeholder are skipped.
 
-| Index | Nome | Hex | Significado |
+## 6. Transformation rules
+
+### 6.1 Installment tag in the description
+
+Regex `\((\d+)\s*/\s*(\d+)\)`, anywhere in the text:
+
+- `'Telha Norte (7/10)'` → `'Telha Norte'`, 7/10
+- `'Amazon (4/4) - Smart Lock'` → `'Amazon - Smart Lock'`, 4/4
+- `'Mercado'` → `'Mercado'`, 1/1, not an installment
+
+Collapse doubled whitespace after removing the tag.
+
+### 6.2 Color resolution (rgb + theme)
+
+**Quirk**: Google Sheets exports some fills as `type='rgb'` (literal hex,
+e.g. `FF4BACC6`) and others as `type='theme'` (an index into the workbook
+theme, e.g. `theme=9, tint=0.0`), for the same visible color. Both have to
+resolve to the same value.
+
+**Theme resolution**: parse `xl/theme/theme1.xml` from the XLSX. For the
+template these workbooks use:
+
+| Index | Name | Hex | Meaning |
 |---|---|---|---|
-| 0 | dk1 | `#000000` | neutro |
-| 1 | lt1 | `#FFFFFF` | neutro |
-| 2 | dk2 | `#000000` | neutro |
-| 3 | lt2 | `#FFFFFF` | neutro |
+| 0 | dk1 | `#000000` | neutral |
+| 1 | lt1 | `#FFFFFF` | neutral |
+| 2 | dk2 | `#000000` | neutral |
+| 3 | lt2 | `#FFFFFF` | neutral |
 | 4 | accent1 | `#4F81BD` | — |
 | 5 | accent2 | `#C0504D` | — |
 | 6 | accent3 | `#9BBB59` | — |
@@ -315,178 +228,94 @@ template usado, o color scheme é:
 | 8 | accent5 | `#4BACC6` | **Person A** |
 | 9 | accent6 | `#F79646` | **Person B** |
 
-**Mapeamento final** (depois de resolver theme → hex):
+**Mapping** (after resolving theme → hex):
 
-| Hex resolvido | Dimensão | Valor |
+| Resolved hex | Dimension | Value |
 |---|---|---|
-| `4BACC6` (rgb direto OU theme=8) | dono | Person A |
-| `F79646` (rgb direto OU theme=9) | dono | Person B |
-| `FFFFFF`, `000000`, sem fill | dono | Outros |
-| `B4A7D6` | meio_pagamento | Card A |
-| `8E7CC3` | meio_pagamento | Card B |
-| `9FC5E8` | meio_pagamento | Card C |
-| outras | meio_pagamento | Outro |
+| `4BACC6` (rgb or theme=8) | owner | Person A |
+| `F79646` (rgb or theme=9) | owner | Person B |
+| `FFFFFF`, `000000`, no fill | owner | Other |
+| `B4A7D6` | payment method | Card A |
+| `8E7CC3` | payment method | Card B |
+| `9FC5E8` | payment method | Card C |
+| anything else | payment method | Other |
 
-**Regra adicional pra 2021**: arquivo não usa cor pra dono. Atribuir tudo
-como `'Person A'` (decisão fixada — usuário vai revisar manualmente após
-ingestão).
+**2021 rule**: the 2021 file doesn't color credits by owner, so its credits
+default to `'Person A'`.
 
-**Pseudocódigo da resolução**:
+Unrecognized colors (e.g. a manual yellow highlight) are counted and logged
+by the ingestion, never fatal.
 
-```python
-def resolve_color(cell, theme_map):
-    fill = cell.fill.start_color
-    if fill.type == 'rgb' and fill.value:
-        return fill.value[-6:].upper()  # remove alpha
-    elif fill.type == 'theme':
-        idx = int(fill.value)
-        return theme_map[idx].upper()
-    return None
-```
+### 6.3 Dates
 
-### 6.3 Datas
+- `transaction_date`: from the cell (original purchase date)
+- `budget_month`: first day of the **sheet's** month (`JAN` 2026 → `2026-01-01`)
 
-- `data_transacao`: vem da célula (data original da compra)
-- `data_competencia`: primeiro dia do mês da **aba** (JAN 2026 → 2026-01-01)
+Use `budget_month` for monthly budget analysis and `transaction_date` for
+cash flow or card statement analysis. A card purchase lands on the next
+month's sheet, and each installment on a later one, so the two differ often.
 
-Use `data_competencia` para análises mensais/orçamentárias; use
-`data_transacao` para análises de fluxo de caixa real ou fatura do cartão.
+### 6.4 Macro-category for 2021
 
-### 6.4 Macrocategoria para arquivos pré-2026
+The column doesn't exist in 2021. Join `category` against
+`stg_categories`, which covers the canonical list and the legacy names.
+A category that still doesn't match gets `'Unknown'` and is flagged by a
+dbt test, so a new category typed in the sheet gets noticed.
 
-Coluna não existe na origem. Joinar `categoria` contra
-`raw.categorias_config` (fonte 2026). Se a categoria não existir nas
-Configurações 2026, marcar como `'Desconhecido'` e logar.
-
-### 6.5 `transacao_id` (idempotência)
+### 6.5 `transaction_id` (idempotency)
 
 ```python
-import hashlib
-transacao_id = hashlib.sha256(
-    f"{source_file}|{source_sheet}|{source_row}|{tipo}".encode()
+transaction_id = hashlib.sha256(
+    f"{source_file}|{source_sheet}|{source_row}|{side}".encode()
 ).hexdigest()[:16]
 ```
 
-Rodar a ETL N vezes sobre o mesmo XLSX produz o mesmo ID. Se a linha
-mudar de posição no XLSX, vira ID novo — isso é OK porque a fonte é o
-XLSX, não a entidade lógica. O `tipo` (`credito`/`debito`) entra no hash
-porque os dois lados dividem a mesma linha física.
+Re-running on the same XLSX gives the same id. If a row moves in the XLSX
+it gets a new id, which is fine: the source of truth is the workbook, not a
+logical entity. `side` is part of the hash because credit and debit share
+each sheet row.
 
-### 6.6 Filtro de linhas
+### 6.6 Empty rows
 
-Linha "vazia": descrição E valor E data todos nulos → ignorar.
-Linha com valor 0 (ex.: `Vale-Refeição` zerado): **manter** (decisão
-fixada) — útil para análise de "esse mês não teve VR".
+A side is empty when description, amount and date are all null; it is
+skipped. A zero amount (e.g. a benefit row left at 0) is **kept**, since
+"no payment this month" is information.
 
-### 6.7 Categorias especiais com flags dedicadas
+### 6.7 Categories with dedicated flags
 
-| Categoria | tipo | Flag | Significado |
+| Category | Side | Flag | Meaning |
 |---|---|---|---|
-| `Proventos` | crédito | `eh_provento=true` | Provento de FII pago |
-| `Investimento` | débito | `eh_aporte_investimento=true` | Aporte; não conta no `valor_efetivo` |
-| `Cartão de Crédito` | débito | `eh_ajuste_fatura=true` | Raro: desconto por antecipação, cashback de pontos. **Não é compra individual.** |
+| `Proventos` | credit | `is_dividend` | real-estate fund dividend |
+| `Investimento` | debit | `is_investment_contribution` | money moved to investments; excluded from `effective_amount` |
+| `Cartão de Crédito` | debit | `is_card_adjustment` | rare: early-payment discount or points converted to cashback. **Not a purchase.** |
 
-`valor_efetivo` exclui aportes de investimento, refletindo o impacto real no fluxo de caixa do mês.
+`effective_amount` leaves out investment contributions, so it reflects the
+month's real cash impact.
 
-## 7. Decisões fixadas
+### 6.8 Portfolio snapshots across files
 
-1. ✅ **2021 sem cor de dono** → tudo `'Person A'`, revisão manual posterior
-2. ✅ **Categoria `'Cartão de Crédito'`** → flag `eh_ajuste_fatura`; semântica: desconto por antecipação OU conversão de pontos em cashback
-3. ✅ **Carteira histórica** → importar TODOS os snapshots
-4. ✅ **Configurações canônicas** → arquivo 2026
-5. ✅ **Linhas com valor 0** → manter
-6. ✅ **Theme colors do Google Sheets** → resolver via parsing do `theme1.xml`; mapeamento normalizado
-7. ✅ **UI de entrada (Fase 3)** → adiada; foco em ingestão + modelagem + dashboard primeiro
+"Situação Atual" is cumulative: the 2024 file holds every snapshot up to
+2024, the 2025 file repeats them and adds 2025's, and so on. Staging keeps,
+for each `reference_date`, the rows from the newest file, which also picks up
+any later correction to an old block.
 
-## 8. Estrutura inicial do repo
+## 7. Decisions
 
-```
-<nome-do-repo>/
-├── README.md
-├── pyproject.toml              # dependências: openpyxl, duckdb, pandas
-├── .gitignore                  # data/raw/, data/financas.duckdb, .env
-├── data/
-│   ├── raw/                    # XLSX baixados (gitignore)
-│   └── financas.duckdb         # banco (gitignore)
-├── ingestion/
-│   ├── __init__.py
-│   ├── extract_sheets.py       # main: lê XLSX → grava raw.*
-│   ├── color_resolver.py       # resolve theme → hex
-│   ├── parcela_parser.py       # regex de parcela
-│   └── snapshot_blocks.py      # detecta blocos da Situação Atual
-├── dbt_project/
-│   ├── dbt_project.yml
-│   ├── profiles.yml            # adapter: duckdb
-│   ├── models/
-│   │   ├── staging/
-│   │   │   ├── stg_transacoes.sql
-│   │   │   ├── stg_carteira_snapshots.sql
-│   │   │   └── stg_categorias.sql
-│   │   └── marts/
-│   │       ├── dim_data.sql
-│   │       ├── dim_categoria.sql
-│   │       ├── dim_dono.sql
-│   │       ├── dim_meio_pagamento.sql
-│   │       ├── fct_transacao.sql
-│   │       └── fct_carteira_snapshot.sql
-│   └── tests/
-├── dashboard/                  # Evidence.dev
-│   ├── package.json
-│   ├── sources/duckdb/
-│   └── pages/
-│       ├── index.md            # visão geral
-│       ├── orcamento.md        # 30/50/10/10 + meta 20%
-│       ├── categorias.md
-│       ├── parcelas.md         # parcelas futuras
-│       └── carteira.md         # série temporal patrimônio
-└── docs/
-    └── data-model.md           # este arquivo
-```
+1. **2021 credits have no owner color** → default to `'Person A'`
+2. **Category `'Cartão de Crédito'`** → `is_card_adjustment`; it means an early-payment discount or a points cashback
+3. **Portfolio history** → load every snapshot, not just the latest
+4. **Canonical categories** → the 2026 file
+5. **Zero-amount rows** → kept
+6. **Google Sheets theme colors** → resolved by parsing `theme1.xml`; one mapping for rgb and theme
+7. **Data entry UI** → out of scope; ingestion, modeling and dashboards come first
 
-## 9. Próximos passos
+## 8. Bugs found with the synthetic data (fixed)
 
-1. ✅ Setup do repo + `pyproject.toml`
-2. ✅ `ingestion/color_resolver.py` + `parcela_parser.py` + `snapshot_blocks.py` (libs testáveis isoladas)
-3. ✅ `ingestion/extract_sheets.py` (main da Fase 0) — ver seção 10
-4. ⏭️ **PRÓXIMO**: baixar os 6 XLSX para `data/raw/`, rodar a ETL e validar a carga `raw.*` manualmente contra os totais da planilha
-5. dbt staging
-6. dbt marts (incluindo geração de `dim_data`)
-7. Setup do Evidence.dev
-8. Primeira página de dashboard (orçamento)
-
-## 10. Status da ingestão (`extract_sheets.py`)
-
-Implementado e testado contra fixtures sintéticas (2021 e 2022+). **Ainda não
-rodou contra os XLSX reais** — não há arquivos em `data/raw/` (gitignored).
-
-CLI:
-
-```bash
-python -m ingestion.extract_sheets --xlsx-dir data/raw --db data/financas.duckdb
-```
-
-Comportamento implementado:
-
-- Detecta abas mensais por nome (`JAN`, `Fevereiro`, …), a aba `Situação Atual`
-  e a aba `Configurações` (esta só do arquivo cujo nome contém `2026`).
-- **Layout de débito dinâmico**: acha a linha de header e separa lado
-  crédito/débito pela 2ª ocorrência de "Descrição" — cobre 2021 (sem
-  MacroCategoria) e 2022+ sem posições fixas.
-- **Camada raw é literal**: grava `descricao_raw` com o sufixo `(N/M)` intacto.
-  O `parcela_parser` **não** é usado aqui — parsing de parcela e resolução
-  cor → dono/meio_pagamento ficam para a stg (dbt). `color_resolver` é usado só
-  para detectar/contar cores não reconhecidas (warn, não falha).
-- **Idempotência**: recarga por `DELETE WHERE source_file` + INSERT;
-  `transacao_id = sha256(file|sheet|row|tipo)[:16]`.
-
-### Bugs encontrados com os dados sintéticos (corrigidos)
-
-- **`transacao_id` colidindo**: o hash usava só `(file, sheet, row)`, e
-  crédito e débito dividem a mesma linha física. Nos dados sintéticos,
-  934 de 4.142 transações tinham ID repetido. Correção: `tipo` no hash.
-- **Linha `Total:` carregada como aplicação**: o filtro olhava só a
-  primeira coluna do bloco (B), mas o rótulo fica na C. Eram 137 linhas a
-  mais em `raw.carteira_snapshots`, o que dobrava qualquer soma por
-  snapshot. Correção: checar todas as colunas de rótulo e casar o rótulo
-  inteiro (`Total`, `Total:`), para não descartar um ativo como
-  "Total Return Fund".
+- **Colliding `transaction_id`**: the hash used only `(file, sheet, row)`,
+  but credit and debit share each sheet row. On the synthetic data, 934 of
+  4,142 transactions had a duplicate id. Fix: `side` in the hash.
+- **`Total:` row loaded as a holding**: the filter only checked the block's
+  first column (B), but the label sits in C. That added 137 rows to the
+  portfolio snapshots and doubled any per-snapshot sum. Fix: check every
+  label column and match the whole label (`Total`, `Total:`), so an asset
+  like "Total Return Fund" is kept.
