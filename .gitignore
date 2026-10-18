@@ -26,6 +26,7 @@ service-account*.json
 data/raw/*
 !data/raw/.gitkeep
 data/processed/
+data/synthetic/
 *.duckdb
 *.duckdb.wal
 *.parquet

@@ -1,4 +1,4 @@
-"""Testes do snapshot_blocks. Requer XLSX real como fixture."""
+"""Testes do snapshot_blocks. Rodam sobre o XLSX sintético (ou um real, via env var)."""
 
 from __future__ import annotations
 
@@ -123,14 +123,14 @@ class TestIterSnapshotRows:
 class TestRegressao:
     """Casos específicos observados no XLSX 2026."""
 
-    def test_snapshot_2026_05_23_existe(self, situacao_atual) -> None:
-        """O último snapshot conhecido é 2026-05-23."""
-        blocks = find_snapshot_blocks(situacao_atual)
-        datas = [b.data_referencia for b in blocks]
-        assert date(2026, 5, 23) in datas
-
     def test_snapshot_2022_08_25_existe(self, situacao_atual) -> None:
         """O primeiro snapshot conhecido é 2022-08-25."""
         blocks = find_snapshot_blocks(situacao_atual)
         datas = [b.data_referencia for b in blocks]
         assert date(2022, 8, 25) in datas
+
+    def test_primeiro_snapshot_e_texto_sem_header(self, situacao_atual) -> None:
+        """O primeiro snapshot foi escrito como texto livre, sem tabela."""
+        primeiro = find_snapshot_blocks(situacao_atual)[0]
+        assert primeiro.header_row is None
+        assert list(iter_snapshot_rows(situacao_atual, primeiro)) == []

@@ -26,7 +26,7 @@ Princípios da camada raw (ver ``docs/data-model.md`` seções 2 e 5):
 
 CLI::
 
-    python -m ingestion.extract_sheets --xlsx-dir data/raw --db data/financas.duckdb
+    python -m ingestion.extract_sheets --xlsx-dir data/raw --db data/warehouse.duckdb
 """
 
 from __future__ import annotations
@@ -56,7 +56,7 @@ from ingestion.snapshot_blocks import find_snapshot_blocks, iter_snapshot_rows
 log = logging.getLogger("ingestion.extract_sheets")
 
 DEFAULT_XLSX_DIR = Path("data/raw")
-DEFAULT_DB = Path("data/financas.duckdb")
+DEFAULT_DB = Path("data/warehouse.duckdb")
 
 # Arquivo cuja aba "Configurações" é a fonte canônica de categorias.
 CONFIG_SOURCE_YEAR = 2026
@@ -640,7 +640,7 @@ def main(argv: list[str] | None = None) -> None:
         "--db",
         type=Path,
         default=DEFAULT_DB,
-        help="Caminho do arquivo DuckDB (default: data/financas.duckdb).",
+        help="Caminho do arquivo DuckDB (default: data/warehouse.duckdb).",
     )
     args = parser.parse_args(argv)
 

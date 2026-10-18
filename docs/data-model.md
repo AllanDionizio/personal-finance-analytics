@@ -107,7 +107,7 @@ CREATE TABLE stg.transacoes (
 
     -- dimensões derivadas de cor (mapeamento normalizado rgb+theme)
     dono VARCHAR,                       -- 'Person A' | 'Person B' | 'Outros'
-    meio_pagamento VARCHAR,             -- 'Card A' | 'Card B' | 'Outro'
+    meio_pagamento VARCHAR,             -- 'Card A' | 'Card B' | 'Card C' | 'Outro'
 
     -- flags
     status_ok BOOLEAN,                  -- 'Sim' → true, 'Não' → false
@@ -174,7 +174,7 @@ CREATE TABLE marts.dim_dono (
 ```sql
 CREATE TABLE marts.dim_meio_pagamento (
     meio_pagamento_key VARCHAR PRIMARY KEY,
-    meio_pagamento VARCHAR,             -- 'Card A' | 'Card B' | 'Outro'
+    meio_pagamento VARCHAR,             -- 'Card A' | 'Card B' | 'Card C' | 'Outro'
     tipo VARCHAR,                       -- 'cartao_credito' | 'outro'
     cor_origem VARCHAR
 );
@@ -324,6 +324,7 @@ template usado, o color scheme é:
 | `FFFFFF`, `000000`, sem fill | dono | Outros |
 | `B4A7D6` | meio_pagamento | Card A |
 | `8E7CC3` | meio_pagamento | Card B |
+| `9FC5E8` | meio_pagamento | Card C |
 | outras | meio_pagamento | Outro |
 
 **Regra adicional pra 2021**: arquivo não usa cor pra dono. Atribuir tudo
