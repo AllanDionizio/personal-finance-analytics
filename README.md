@@ -64,7 +64,7 @@ Running the ingestion end to end on the synthetic workbooks measured one suspect
 
 | Bug | Root cause | Impact before the fix | Fix |
 |---|---|---|---|
-| Duplicate `transacao_id` | The id hashed `file\|sheet\|row`, but a credit and a debit share each sheet row | 934 of 4,142 transactions had a non-unique id | Add the side (`credito`/`debito`) to the hash |
+| Duplicate `transaction_id` | The id hashed `file\|sheet\|row`, but a credit and a debit share each sheet row | 934 of 4,142 transactions had a non-unique id | Add the side (`credit`/`debit`) to the hash |
 | Portfolio totals loaded as holdings | The `Total:` filter only checked the block's first column (B); the label sits in C | 137 extra rows, doubling any per-snapshot sum | Check every label column and match the whole label, so a fund named "Total Return" still loads |
 
 ## Tech stack
@@ -96,6 +96,7 @@ No credentials or real data needed. The ingestion is idempotent: re-running on t
 
 ## Design decisions & trade-offs
 
+- **Decision:** English names for everything the project defines, source values left in Portuguese. **Why:** the code and models read for an international audience, while the raw layer stays a faithful copy of the workbooks (`'Sim'`, `'Mercado'`, `'Fixo'`). **Trade-off:** staging has to map the Portuguese values that drive logic, such as the paid flag and the special categories.
 - **Decision:** keep the raw layer literal (installment suffixes and raw color codes untouched). **Why:** parsing rules can change and be replayed in dbt without re-reading the workbooks. **Trade-off:** the raw tables are not directly queryable for analysis.
 - **Decision:** resolve both `rgb` and `theme` color references. **Why:** Google Sheets exports the same visible color either as a hex value or as a theme index, depending on how it was applied. **Trade-off:** the resolver depends on parsing `xl/theme/theme1.xml` inside each workbook.
 - **Decision:** detect the debit-side layout from the header row instead of fixed positions. **Why:** a column was added in 2022, so 2021 workbooks have a different layout. **Trade-off:** the header detection has to be tested against both layouts.
