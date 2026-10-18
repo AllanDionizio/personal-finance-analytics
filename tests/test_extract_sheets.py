@@ -12,7 +12,13 @@ import pytest
 
 from ingestion.extract_sheets import run
 from synthetic import catalog
-from synthetic.generate import FILE_TEMPLATE, FIRST_YEAR, Generator
+from synthetic.generate import (
+    FILE_TEMPLATE,
+    FIRST_YEAR,
+    LAST_YEAR,
+    TEXT_SNAPSHOT_DATE,
+    Generator,
+)
 
 
 @pytest.fixture(scope="module")
@@ -82,3 +88,20 @@ def test_snapshot_totals_are_not_loaded_as_holdings(con) -> None:
     """Each block ends with a 'Total:' row labeled in column C, not B."""
     sql = "select count(*) from raw.carteira_snapshots where aplicacao ilike 'total%'"
     assert _scalar(con, sql) == 0
+
+
+def test_snapshot_sums_match_the_portfolio(con) -> None:
+    """Per snapshot, loaded holdings add up to the generated portfolio, whatever the
+    total row's label: a leaked total row would double the sum."""
+    expected = {
+        s.when: round(sum(h.value for h in s.holdings), 2)
+        for s in Generator().build().snapshots
+        if s.when != TEXT_SNAPSHOT_DATE
+    }
+    sql = f"""
+        select data_referencia, sum(valor_bruto) from raw.carteira_snapshots
+        where source_file = '{FILE_TEMPLATE.format(year=LAST_YEAR)}'
+        group by 1
+    """
+    loaded = {when: round(float(total), 2) for when, total in con.execute(sql).fetchall()}
+    assert loaded == expected
