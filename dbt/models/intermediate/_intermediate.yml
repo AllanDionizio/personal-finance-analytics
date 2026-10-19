@@ -3,7 +3,8 @@ version: 2
 models:
   - name: int_installment_transactions
     description: >
-      Installment rows of stg_transactions, each tagged with its purchase_id:
+      Installment debits of stg_transactions (an income received in
+      installments is not owed), each tagged with its purchase_id:
       a hash of description, category, payment method, installment count,
       amount and the month of the first installment.
     columns:

@@ -158,7 +158,7 @@ translated: `'Fixo'` → `'Fixed'`, `'Variável'` → `'Variable'`, `'n/a'` →
 
 | Model | Grain | Purpose |
 |---|---|---|
-| `int_installment_transactions` | one row per installment row of `stg_transactions` | tags each row with its `purchase_id` (6.9) |
+| `int_installment_transactions` | one row per installment debit of `stg_transactions` | tags each row with its `purchase_id` (6.9) |
 | `int_installment_purchases` | one row per installment purchase | the whole plan: count, amount, first and last month, which installments the workbooks hold |
 
 ### Marts (tables in `marts`)
