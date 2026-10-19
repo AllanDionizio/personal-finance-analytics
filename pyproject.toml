@@ -22,6 +22,11 @@ dev = [
     "ruff==0.17.1",  # keep in sync with .pre-commit-config.yaml
     "pre-commit>=4.0",
     "mypy>=1.10",
+    # dbt and SQL lint, pinned so local runs and CI build the same way
+    "dbt-core==1.12.6",
+    "dbt-duckdb==1.11.0",
+    "sqlfluff==4.4.0",  # keep in sync with .pre-commit-config.yaml
+    "sqlfluff-templater-dbt==4.4.0",
 ]
 
 [tool.hatch.build.targets.wheel]

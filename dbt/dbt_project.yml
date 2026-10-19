@@ -1,0 +1,21 @@
+name: personal_finance
+version: "0.1.0"
+config-version: 2
+profile: personal_finance
+
+model-paths: ["models"]
+seed-paths: ["seeds"]
+test-paths: ["tests"]
+macro-paths: ["macros"]
+
+clean-targets: ["target", "dbt_packages"]
+
+models:
+  personal_finance:
+    staging:
+      +schema: staging
+      +materialized: view
+
+seeds:
+  personal_finance:
+    +schema: seeds

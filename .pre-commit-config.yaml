@@ -16,8 +16,12 @@ repos:
         args: ["--fix"]
       - id: ruff-format
 
-  - repo: https://github.com/sqlfluff/sqlfluff
-    rev: 3.2.0
+  # Runs from the project's venv: the dbt templater needs dbt, the
+  # packages (make deps) and the warehouse file to compile the models.
+  - repo: local
     hooks:
       - id: sqlfluff-lint
-        files: ^dbt/models/
+        name: sqlfluff lint
+        entry: env DUCKDB_PATH=data/warehouse.duckdb sqlfluff lint
+        language: system
+        files: ^dbt/models/.*\.sql$

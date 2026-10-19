@@ -1,0 +1,137 @@
+version: 2
+
+# Unit tests pin the staging rules from docs/data-model.md on hand-made rows,
+# including cases the synthetic data may not cover.
+
+unit_tests:
+  - name: test_installment_tag_is_parsed
+    description: Same cases as tests/test_installment_parser.py.
+    model: stg_transactions
+    given:
+      - input: source('raw', 'transactions')
+        rows:
+          - {transaction_id: "1", source_file: "x 2025.xlsx", source_sheet: "JAN", side: "debit", description: "Telha Norte (7/10)"}
+          - {transaction_id: "2", source_file: "x 2025.xlsx", source_sheet: "JAN", side: "debit", description: "Amazon (4/4) - Smart Lock"}
+          - {transaction_id: "3", source_file: "x 2025.xlsx", source_sheet: "JAN", side: "debit", description: "A - (1/2) - B"}
+          - {transaction_id: "4", source_file: "x 2025.xlsx", source_sheet: "JAN", side: "debit", description: "Pet shop -  Ração"}
+          - {transaction_id: "5", source_file: "x 2025.xlsx", source_sheet: "JAN", side: "debit", description: "Café Sabor 10/12 Premium"}
+      - input: source('raw', 'workbook_themes')
+        rows: []
+      - input: ref('color_mapping')
+        rows: []
+      - input: ref('stg_categories')
+        rows: []
+    expect:
+      rows:
+        - {transaction_id: "1", description: "Telha Norte", installment_number: 7, installment_count: 10, is_installment: true}
+        - {transaction_id: "2", description: "Amazon - Smart Lock", installment_number: 4, installment_count: 4, is_installment: true}
+        - {transaction_id: "3", description: "A - B", installment_number: 1, installment_count: 2, is_installment: true}
+        - {transaction_id: "4", description: "Pet shop - Ração", installment_number: 1, installment_count: 1, is_installment: false}
+        - {transaction_id: "5", description: "Café Sabor 10/12 Premium", installment_number: 1, installment_count: 1, is_installment: false}
+
+  - name: test_owner_resolves_theme_colors_per_workbook
+    description: >
+      A theme index resolves against its own workbook's palette, so index 8
+      is Person A in one file and not in another. 2021 credits default to
+      Person A, and budget_month comes from the sheet and the file's year.
+    model: stg_transactions
+    given:
+      - input: source('raw', 'transactions')
+        rows:
+          - {transaction_id: "1", source_file: "x 2025.xlsx", source_sheet: "FEV", side: "credit", amount_color_type: "theme", amount_color_value: "8"}
+          - {transaction_id: "2", source_file: "y 2026.xlsx", source_sheet: "FEV", side: "credit", amount_color_type: "theme", amount_color_value: "8"}
+          - {transaction_id: "3", source_file: "x 2025.xlsx", source_sheet: "FEV", side: "credit", amount_color_type: "rgb", amount_color_value: "FFF79646"}
+          - {transaction_id: "4", source_file: "x 2025.xlsx", source_sheet: "FEV", side: "credit", amount_color_type: "rgb", amount_color_value: "FFFFFFFF"}
+          - {transaction_id: "5", source_file: "z 2021.xlsx", source_sheet: "Dezembro", side: "credit", amount_color_type: "rgb", amount_color_value: "FFFFFFFF"}
+      - input: source('raw', 'workbook_themes')
+        rows:
+          - {source_file: "x 2025.xlsx", theme_index: 8, hex: "4BACC6"}
+          - {source_file: "y 2026.xlsx", theme_index: 8, hex: "123456"}
+      - input: ref('color_mapping')
+        rows:
+          - {hex: "4BACC6", dimension: "owner", value: "Person A"}
+          - {hex: "F79646", dimension: "owner", value: "Person B"}
+      - input: ref('stg_categories')
+        rows: []
+    expect:
+      rows:
+        - {transaction_id: "1", owner: "Person A", payment_method: null, budget_month: "2025-02-01"}
+        - {transaction_id: "2", owner: "Other", payment_method: null, budget_month: "2026-02-01"}
+        - {transaction_id: "3", owner: "Person B", payment_method: null, budget_month: "2025-02-01"}
+        - {transaction_id: "4", owner: "Other", payment_method: null, budget_month: "2025-02-01"}
+        - {transaction_id: "5", owner: "Person A", payment_method: null, budget_month: "2021-12-01"}
+
+  - name: test_payment_method_prefers_the_amount_color
+    description: >
+      The amount cell's card wins over the description's; the description is
+      the fallback; a manual highlight never becomes a card.
+    model: stg_transactions
+    given:
+      - input: source('raw', 'transactions')
+        rows:
+          - {transaction_id: "1", source_file: "x 2025.xlsx", source_sheet: "JAN", side: "debit", description_color_type: "rgb", description_color_value: "FFFFFF00", amount_color_type: "rgb", amount_color_value: "FFB4A7D6"}
+          - {transaction_id: "2", source_file: "x 2025.xlsx", source_sheet: "JAN", side: "debit", description_color_type: "rgb", description_color_value: "FF8E7CC3", amount_color_type: "rgb", amount_color_value: "00000000"}
+          - {transaction_id: "3", source_file: "x 2025.xlsx", source_sheet: "JAN", side: "debit", description_color_type: "rgb", description_color_value: "FF8E7CC3", amount_color_type: "rgb", amount_color_value: "FF9FC5E8"}
+          - {transaction_id: "4", source_file: "x 2025.xlsx", source_sheet: "JAN", side: "debit", description_color_type: "rgb", description_color_value: "FFFFFF00", amount_color_type: "rgb", amount_color_value: "00000000"}
+      - input: source('raw', 'workbook_themes')
+        rows: []
+      - input: ref('color_mapping')
+        rows:
+          - {hex: "B4A7D6", dimension: "payment_method", value: "Card A"}
+          - {hex: "8E7CC3", dimension: "payment_method", value: "Card B"}
+          - {hex: "9FC5E8", dimension: "payment_method", value: "Card C"}
+      - input: ref('stg_categories')
+        rows: []
+    expect:
+      rows:
+        - {transaction_id: "1", owner: null, payment_method: "Card A"}
+        - {transaction_id: "2", owner: null, payment_method: "Card B"}
+        - {transaction_id: "3", owner: null, payment_method: "Card C"}
+        - {transaction_id: "4", owner: null, payment_method: "Other"}
+
+  - name: test_macro_category_and_flags
+    description: >
+      A typed macro-category wins; otherwise it comes from the category list,
+      and a category in no list is 'Unknown'. Investment contributions are not
+      effective.
+    model: stg_transactions
+    given:
+      - input: source('raw', 'transactions')
+        rows:
+          - {transaction_id: "1", source_file: "x 2023.xlsx", source_sheet: "JAN", side: "debit", category: "Mercado", macro_category: "Fixo", status: "Sim"}
+          - {transaction_id: "2", source_file: "x 2021.xlsx", source_sheet: "JAN", side: "debit", category: " Uber ", macro_category: null, status: "Sim"}
+          - {transaction_id: "3", source_file: "x 2021.xlsx", source_sheet: "JAN", side: "debit", category: "Algo Novo", macro_category: null, status: "Sim"}
+          - {transaction_id: "4", source_file: "x 2023.xlsx", source_sheet: "JAN", side: "debit", category: "Investimento", macro_category: "n/a", status: "Sim"}
+          - {transaction_id: "5", source_file: "x 2023.xlsx", source_sheet: "JAN", side: "credit", category: "Proventos", macro_category: null, status: "Não"}
+      - input: source('raw', 'workbook_themes')
+        rows: []
+      - input: ref('color_mapping')
+        rows: []
+      - input: ref('stg_categories')
+        rows:
+          - {category_key: "k_uber", category_type: "expense", category: "Uber", macro_category: "Variable"}
+          - {category_key: "k_inv", category_type: "expense", category: "Investimento", macro_category: "Not applicable"}
+          - {category_key: "k_prov", category_type: "income", category: "Proventos", macro_category: null}
+    expect:
+      rows:
+        - {transaction_id: "1", category_key: null, macro_category: "Fixed", is_settled: true, is_effective: true, is_dividend: false, is_investment_contribution: false}
+        - {transaction_id: "2", category_key: "k_uber", macro_category: "Variable", is_settled: true, is_effective: true, is_dividend: false, is_investment_contribution: false}
+        - {transaction_id: "3", category_key: null, macro_category: "Unknown", is_settled: true, is_effective: true, is_dividend: false, is_investment_contribution: false}
+        - {transaction_id: "4", category_key: "k_inv", macro_category: "Not applicable", is_settled: true, is_effective: false, is_dividend: false, is_investment_contribution: true}
+        - {transaction_id: "5", category_key: "k_prov", macro_category: null, is_settled: false, is_effective: false, is_dividend: true, is_investment_contribution: false}
+
+  - name: test_portfolio_keeps_the_newest_file
+    description: >
+      A snapshot repeated across files is kept once, from the newest file,
+      and bank spellings collapse to the most frequent one.
+    model: stg_portfolio_snapshots
+    given:
+      - input: source('raw', 'portfolio_snapshots')
+        rows:
+          - {source_file: "x 2024.xlsx", reference_date: "2024-05-20", bank: "Corretora Beta", asset: "FIIs", gross_value: 100}
+          - {source_file: "x 2025.xlsx", reference_date: "2024-05-20", bank: "Corretora Beta", asset: "FIIs", gross_value: 101}
+          - {source_file: "x 2025.xlsx", reference_date: "2025-01-20", bank: "corretora beta ", asset: "FIIs", gross_value: 150}
+    expect:
+      rows:
+        - {reference_date: "2024-05-20", bank: "Corretora Beta", asset: "FIIs", asset_class: "Real estate fund", gross_value: 101, source_file: "x 2025.xlsx"}
+        - {reference_date: "2025-01-20", bank: "Corretora Beta", asset: "FIIs", asset_class: "Real estate fund", gross_value: 150, source_file: "x 2025.xlsx"}

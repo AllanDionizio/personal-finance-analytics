@@ -41,7 +41,8 @@ def parse_installment(description: str | None) -> InstallmentInfo:
     """Extract installment info from a description.
 
     Without a ``(N/M)`` tag, returns installment 1/1 with
-    ``is_installment=False`` and the original description, trimmed.
+    ``is_installment=False``. Whitespace is collapsed either way, as dbt's
+    ``clean_description`` macro does.
 
     Args:
         description: transaction description, or None.
@@ -62,7 +63,7 @@ def parse_installment(description: str | None) -> InstallmentInfo:
     if description is None:
         return InstallmentInfo("", 1, 1, False)
 
-    text = str(description).strip()
+    text = _WHITESPACE_RE.sub(" ", str(description)).strip()
     if not text:
         return InstallmentInfo("", 1, 1, False)
 

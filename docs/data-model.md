@@ -1,7 +1,7 @@
 # Data model
 
 Design doc for the data layer: architecture, the raw tables the ingestion
-loads, the planned staging and marts models, how each source field maps into
+loads, the staging models and the planned marts, how each source field maps into
 them, and the transformation rules and decisions behind them.
 
 **Stack:** Python (ingestion) → DuckDB (storage) → dbt (modeling) → Evidence (dashboards)
@@ -104,7 +104,10 @@ references per file (see 6.2).
 | `theme_index` | INTEGER | position in the theme's color scheme |
 | `hex` | VARCHAR | 6-char uppercase hex; NULL if not resolvable statically |
 
-## 3. Staging (planned)
+## 3. Staging
+
+Views in the `staging` schema, built by `dbt/models/staging/`. Unit tests
+(`_staging__unit_tests.yml`) pin the rules of section 6 on hand-made rows.
 
 ### `stg_transactions`
 
@@ -116,8 +119,9 @@ references per file (see 6.2).
 | `side` | VARCHAR | `'credit'` / `'debit'` |
 | `description` | VARCHAR | trimmed, `(N/M)` tag removed |
 | `raw_description` | VARCHAR | as typed |
-| `category` | VARCHAR | trimmed |
-| `macro_category` | VARCHAR | from raw, or joined from `stg_categories` (6.4) |
+| `category_key` | VARCHAR | FK to `stg_categories`; NULL if the category is in no list |
+| `category` | VARCHAR | trimmed, as typed in Portuguese |
+| `macro_category` | VARCHAR | debits: `'Fixed'` / `'Variable'` / `'Not applicable'`, from raw or `stg_categories`, else `'Unknown'` (6.4) |
 | `amount` | DECIMAL(12,2) | |
 | `owner` | VARCHAR | credits: `'Person A'` / `'Person B'` / `'Other'` (6.2) |
 | `payment_method` | VARCHAR | debits: `'Card A'` / `'Card B'` / `'Card C'` / `'Other'` |
@@ -133,13 +137,20 @@ references per file (see 6.2).
 
 ### `stg_portfolio_snapshots`
 
-Typed and deduplicated across files (6.8), with `bank` trimmed and an
-inferred `asset_class`.
+Deduplicated across files (6.8). `bank` is trimmed and mapped to its most
+frequent spelling, since case drifts when typed by hand (`'Banco alfa
+(fundos)'`). `asset_class` is inferred from the asset name: `'Real estate
+fund'` (FIIs), `'Fixed income'` (CDB, LCI, CRI, CCB, Tesouro, CDI-indexed),
+`'Multimarket fund'`, `'Crypto'`, `'Cash'` (account balance) or `'Other'`
+(FGTS, pension, equity). `snapshot_id` is `hash(reference_date|bank|asset)`.
 
 ### `stg_categories`
 
 `raw.category_config` plus the legacy categories that appear only in old
-files (e.g. `'Farmácia'`, `'Uber'`), each with its macro-category.
+files (seed `legacy_categories`, e.g. `'Farmácia'`, `'Uber'`), keyed by
+`category_key = hash(category_type|category)`. The macro-category is
+translated: `'Fixo'` → `'Fixed'`, `'Variável'` → `'Variable'`, `'n/a'` →
+`'Not applicable'`.
 
 ## 4. Marts (planned)
 
@@ -219,7 +230,9 @@ Regex `\((\d+)\s*/\s*(\d+)\)`, anywhere in the text:
 - `'Amazon (4/4) - Smart Lock'` → `'Amazon - Smart Lock'`, 4/4
 - `'Mercado'` → `'Mercado'`, 1/1, not an installment
 
-Collapse doubled whitespace after removing the tag.
+Collapse doubled whitespace, with or without a tag, and fix the `A - - B`
+left by a tag between two dashes. `ingestion/installment_parser.py` and
+the dbt `clean_description` macro implement the same rules.
 
 ### 6.2 Color resolution (rgb + theme)
 

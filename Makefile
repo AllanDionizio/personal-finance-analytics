@@ -1,4 +1,4 @@
-.PHONY: setup data seed build test docs lint
+.PHONY: setup data deps build test docs lint all
 
 export DBT_PROFILES_DIR := $(CURDIR)/dbt
 
@@ -11,19 +11,24 @@ data:
 	python -m synthetic.generate --out data/synthetic
 	python -m ingestion.extract_sheets --xlsx-dir data/synthetic --db data/warehouse.duckdb
 
-seed:
-	cd dbt && dbt deps && dbt seed
+deps:
+	cd dbt && dbt deps
 
-build:
+# Seeds, models, unit tests and data tests, in DAG order
+build: deps
 	cd dbt && dbt build
+	cd dbt && dbt source freshness
 
 test:
-	cd dbt && dbt test
 	pytest -q
+	cd dbt && dbt test
+
+# From a fresh clone to a built warehouse
+all: data build
 
 docs:
 	cd dbt && dbt docs generate && dbt docs serve
 
 lint:
 	ruff check . && ruff format --check .
-	sqlfluff lint dbt/models
+	DUCKDB_PATH=$(CURDIR)/data/warehouse.duckdb sqlfluff lint dbt/models
