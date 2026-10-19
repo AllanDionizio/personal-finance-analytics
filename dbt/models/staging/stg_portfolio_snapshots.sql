@@ -17,6 +17,12 @@ source as (
 
 ),
 
+aliases as (
+
+    select * from {{ ref('asset_aliases') }}
+
+),
+
 newest_file as (
 
     select *
@@ -46,45 +52,59 @@ canonical_banks as (
     from bank_spellings
     qualify row_number() over (partition by bank_key order by n_rows desc, bank asc) = 1
 
+),
+
+-- Notes typed over an asset name map back to the asset (seed asset_aliases),
+-- so its history stays one series.
+cleaned as (
+
+    select
+        newest_file.*,
+        canonical_banks.bank as clean_bank,
+        coalesce(aliases.asset, newest_file.trimmed_asset) as clean_asset
+    from newest_file
+    left join canonical_banks
+        on lower(newest_file.trimmed_bank) = canonical_banks.bank_key
+    left join aliases
+        on
+            canonical_banks.bank = aliases.bank
+            and newest_file.trimmed_asset = aliases.raw_asset
+
 )
 
 select
-    {{ dbt_utils.generate_surrogate_key([
-        'newest_file.reference_date',
-        'canonical_banks.bank',
-        'newest_file.trimmed_asset',
-    ]) }} as snapshot_id,
-    newest_file.reference_date,
-    canonical_banks.bank,
-    newest_file.trimmed_asset as asset,
+    {{ dbt_utils.generate_surrogate_key(['reference_date', 'clean_bank', 'clean_asset']) }}
+        as snapshot_id,
+    reference_date,
+    clean_bank as bank,
+    clean_asset as asset,
+    trimmed_asset as raw_asset,
     case
-        when newest_file.trimmed_asset ilike 'FII%' then 'Real estate fund'
-        when newest_file.trimmed_asset ilike '%bitcoin%' then 'Crypto'
-        when newest_file.trimmed_asset ilike 'Saldo%' then 'Cash'
+        when clean_asset ilike 'FII%' then 'Real estate fund'
+        when clean_asset ilike '%bitcoin%' then 'Crypto'
+        when clean_asset ilike 'Saldo%' then 'Cash'
         when
-            newest_file.trimmed_asset ilike '%multimercado%'
-            or newest_file.trimmed_asset ilike '%long short%'
+            clean_asset ilike '%multimercado%'
+            or clean_asset ilike '%long short%'
             then 'Multimarket fund'
         when
             regexp_matches(
-                newest_file.trimmed_asset,
+                clean_asset,
                 '^(CDB|LCI|LCA|CRI|CRA|CCB|Tesouro|Recebíveis|Fundo Renda Fixa)'
             )
-            or newest_file.trimmed_asset ilike '%CDI%'
+            or clean_asset ilike '%CDI%'
             then 'Fixed income'
         else 'Other'
     end as asset_class,
-    newest_file.gross_value,
-    newest_file.allocation_pct,
-    newest_file.maturity_date,
-    newest_file.mom,
-    newest_file.yoy,
-    newest_file.net_value_at_maturity,
-    newest_file.return_to_date,
-    newest_file.return_at_maturity,
-    newest_file.source_file,
-    newest_file.source_block_row,
-    newest_file.extracted_at
-from newest_file
-left join canonical_banks
-    on lower(newest_file.trimmed_bank) = canonical_banks.bank_key
+    gross_value,
+    allocation_pct,
+    maturity_date,
+    mom,
+    yoy,
+    net_value_at_maturity,
+    return_to_date,
+    return_at_maturity,
+    source_file,
+    source_block_row,
+    extracted_at
+from cleaned
