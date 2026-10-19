@@ -1,6 +1,8 @@
 -- One row per holding per reference date. "Situação Atual" is cumulative, so
 -- the same snapshot appears in several yearly files; only the newest file's
 -- copy is kept, which also picks up later corrections (data-model 6.8).
+-- The bank join is a left join so a blank bank fails not_null instead of
+-- dropping the row.
 
 with
 
@@ -84,5 +86,5 @@ select
     newest_file.source_block_row,
     newest_file.extracted_at
 from newest_file
-inner join canonical_banks
+left join canonical_banks
     on lower(newest_file.trimmed_bank) = canonical_banks.bank_key
