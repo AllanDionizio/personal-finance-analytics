@@ -15,6 +15,12 @@ models:
     staging:
       +schema: staging
       +materialized: view
+    intermediate:
+      +schema: intermediate
+      +materialized: view
+    marts:
+      +schema: marts
+      +materialized: table
 
 seeds:
   personal_finance:

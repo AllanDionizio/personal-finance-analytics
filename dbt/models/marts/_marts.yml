@@ -1,0 +1,194 @@
+version: 2
+
+models:
+  - name: dim_date
+    description: Calendar, one row per day from 2020-01-01 to 2030-12-31.
+    columns:
+      - name: date_day
+        data_tests:
+          - unique
+          - not_null
+      - name: first_day_of_month
+        description: Joins to the facts' budget_month.
+      - name: day_of_week
+        description: ISO weekday, Monday = 1.
+
+  - name: dim_category
+    description: >
+      One row per category and type, with the 'Unknown' member
+      (category_key = 'unknown') for categories in no list.
+    columns:
+      - name: category_key
+        data_tests:
+          - unique
+          - not_null
+      - name: category
+        description: As typed in Portuguese.
+      - name: macro_category
+        description: "'Fixed', 'Variable', 'Not applicable', NULL for income, 'Unknown'."
+
+  - name: dim_owner
+    description: Owners of credits, from the amount cell's color.
+    columns:
+      - name: owner_key
+        data_tests:
+          - unique
+          - not_null
+      - name: owner
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["Person A", "Person B", "Other"]
+      - name: source_color
+        description: Cell color in the workbooks; NULL for 'Other'.
+
+  - name: dim_payment_method
+    description: Payment methods of debits, from the cell colors.
+    columns:
+      - name: payment_method_key
+        data_tests:
+          - unique
+          - not_null
+      - name: payment_method
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["Card A", "Card B", "Card C", "Other"]
+      - name: method_type
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["credit_card", "other"]
+
+  - name: fct_transactions
+    description: One row per transaction (credit or debit).
+    columns:
+      - name: transaction_id
+        data_tests:
+          - unique
+          - not_null
+      - name: transaction_date
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_date')
+                field: date_day
+      - name: budget_month
+        description: First day of the month the transaction is budgeted in.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_date')
+                field: date_day
+      - name: category_key
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_category')
+                field: category_key
+      - name: owner_key
+        description: Credits only; NULL for debits.
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_owner')
+                field: owner_key
+      - name: payment_method_key
+        description: Debits only; NULL for credits.
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_payment_method')
+                field: payment_method_key
+      - name: purchase_id
+        description: The installment purchase this row belongs to; NULL if not an installment.
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('int_installment_purchases')
+                field: purchase_id
+      - name: amount
+        description: Amount as typed, always positive; `side` says the direction.
+      - name: effective_amount
+        description: amount if is_effective, else 0.
+      - name: signed_effective_amount
+        description: effective_amount, positive for credits and negative for debits.
+    data_tests:
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "(side = 'credit') = (owner_key is not null)"
+          config:
+            description: Credits have an owner and debits don't.
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "(side = 'debit') = (payment_method_key is not null)"
+          config:
+            description: Debits have a payment method and credits don't.
+
+  - name: fct_installments
+    description: >
+      One row per installment of every purchase, recorded in the workbooks or
+      not. The sum of outstanding_amount is what is still owed.
+    columns:
+      - name: installment_id
+        data_tests:
+          - unique
+          - not_null
+      - name: purchase_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('int_installment_purchases')
+                field: purchase_id
+      - name: budget_month
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_date')
+                field: date_day
+      - name: category_key
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_category')
+                field: category_key
+      - name: payment_method_key
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_payment_method')
+                field: payment_method_key
+      - name: transaction_id
+        description: The workbook row of this installment; NULL if it falls outside the workbooks.
+        data_tests:
+          - unique
+          - relationships:
+              arguments:
+                to: ref('fct_transactions')
+                field: transaction_id
+      - name: outstanding_amount
+        description: amount if not settled, else 0.
+      - name: is_recorded
+        description: True if the installment is in the workbooks.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ["purchase_id", "installment_number"]
+
+  - name: fct_portfolio_snapshots
+    description: One row per asset per reference date.
+    columns:
+      - name: snapshot_id
+        data_tests:
+          - unique
+          - not_null
+      - name: reference_date
+        data_tests:
+          - not_null
+      - name: asset_class
+        data_tests:
+          - not_null
