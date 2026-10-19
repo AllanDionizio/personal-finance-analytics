@@ -30,6 +30,10 @@ class TestParseInstallmentBasics:
         result = parse_installment("   ")
         assert result == InstallmentInfo("", 1, 1, False)
 
+    def test_whitespace_is_collapsed_without_a_tag(self) -> None:
+        result = parse_installment("Pet shop -  Ração")
+        assert result == InstallmentInfo("Pet shop - Ração", 1, 1, False)
+
 
 class TestParseInstallmentPositions:
     """The (N/M) tag in different positions of the description."""
