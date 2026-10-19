@@ -372,12 +372,14 @@ is no workbook before 2021 or after the newest year. So a purchase from late
   each payment's own date. A test checks that no two rows of the key share
   an installment number.
 - **Schedule**: `fct_installments` lays out installments 1 to N of each
-  purchase. A recorded installment keeps its `is_settled`; a missing one is
-  settled if it comes before the first recorded one (paid before 2021) and
-  outstanding if it comes after the last one (due after the newest
-  workbook).
-- **What is still owed**: `sum(outstanding_amount)`. A past installment left
-  as `'Não'` in the sheet also counts as outstanding, as typed.
+  purchase.
+- **Settled**: every installment before the as-of month (the newest month
+  with a settled transaction) is paid. In the sheets a past installment is
+  always paid, so a leftover `'Não'` is a typing slip, and installments
+  before 2021 are in no workbook. From the as-of month on, a recorded
+  installment keeps the sheet's status, and one past the newest workbook is
+  outstanding. `fct_transactions` still carries the status as typed.
+- **What is still owed**: `sum(outstanding_amount)`.
 
 ## 7. Decisions
 
@@ -391,6 +393,7 @@ is no workbook before 2021 or after the newest year. So a purchase from late
 8. **Debit payment method** → amount cell color first, description cell color as fallback
 9. **Asset renamed by a typed note** → mapped back through the seed `asset_aliases`
 10. **Installments outside the workbooks** → rebuilt from the purchase plan in `fct_installments`
+11. **Past installments** → always paid in `fct_installments`, whatever the sheet says
 
 ## 8. Bugs found with the synthetic data (fixed)
 

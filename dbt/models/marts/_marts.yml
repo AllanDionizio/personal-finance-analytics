@@ -5,162 +5,251 @@ models:
     description: Calendar, one row per day from 2020-01-01 to 2030-12-31.
     columns:
       - name: date_day
+        description: The day.
         data_tests:
           - unique
           - not_null
+      - name: year
+        description: Calendar year.
+      - name: quarter
+        description: Calendar quarter, 1 to 4.
+      - name: month
+        description: Calendar month, 1 to 12.
+      - name: month_name
+        description: "Month name in English (`'January'`)."
       - name: first_day_of_month
-        description: Joins to the facts' budget_month.
+        description: "Joins to the facts' budget_month."
+      - name: last_day_of_month
+        description: "Last day of the day's month."
       - name: day_of_week
         description: ISO weekday, Monday = 1.
+      - name: day_name
+        description: "Weekday name in English (`'Monday'`)."
+      - name: is_weekend
+        description: True on Saturday and Sunday.
 
   - name: dim_category
     description: >
-      One row per category and type, with the 'Unknown' member
-      (category_key = 'unknown') for categories in no list.
+      One row per category and type, with the 'Unknown' member (category_key = 'unknown')
+      for categories in no list.
     columns:
       - name: category_key
+        description: '{{ doc("category_key") }}'
         data_tests:
           - unique
           - not_null
+      - name: category_type
+        description: '{{ doc("category_type") }}'
       - name: category
         description: As typed in Portuguese.
       - name: macro_category
         description: "'Fixed', 'Variable', 'Not applicable', NULL for income, 'Unknown'."
+      - name: is_legacy
+        description: '{{ doc("is_legacy") }}'
 
   - name: dim_owner
-    description: Owners of credits, from the amount cell's color.
+    description: "Owners of credits, from the amount cell's color."
     columns:
       - name: owner_key
+        description: '{{ doc("owner_key") }}'
         data_tests:
           - unique
           - not_null
       - name: owner
+        description: '{{ doc("owner") }}'
         data_tests:
           - accepted_values:
               arguments:
-                values: ["Person A", "Person B", "Other"]
+                values:
+                  - Person A
+                  - Person B
+                  - Other
       - name: source_color
-        description: Cell color in the workbooks; NULL for 'Other'.
+        description: "Cell color in the workbooks; NULL for 'Other'."
 
   - name: dim_payment_method
     description: Payment methods of debits, from the cell colors.
     columns:
       - name: payment_method_key
+        description: '{{ doc("payment_method_key") }}'
         data_tests:
           - unique
           - not_null
       - name: payment_method
+        description: '{{ doc("payment_method") }}'
         data_tests:
           - accepted_values:
               arguments:
-                values: ["Card A", "Card B", "Card C", "Other"]
+                values:
+                  - Card A
+                  - Card B
+                  - Card C
+                  - Other
       - name: method_type
+        description: '{{ doc("method_type") }}'
         data_tests:
           - accepted_values:
               arguments:
-                values: ["credit_card", "other"]
+                values:
+                  - credit_card
+                  - other
+      - name: source_color
+        description: '{{ doc("source_color") }}'
 
   - name: fct_transactions
     description: One row per transaction (credit or debit).
     columns:
       - name: transaction_id
+        description: '{{ doc("transaction_id") }}'
         data_tests:
           - unique
           - not_null
       - name: transaction_date
+        description: '{{ doc("transaction_date") }}'
         data_tests:
           - relationships:
               arguments:
-                to: ref('dim_date')
+                to: "ref('dim_date')"
                 field: date_day
       - name: budget_month
         description: First day of the month the transaction is budgeted in.
         data_tests:
           - not_null
+          - is_first_day_of_month
           - relationships:
               arguments:
-                to: ref('dim_date')
+                to: "ref('dim_date')"
                 field: date_day
+      - name: side
+        description: '{{ doc("side") }}'
+      - name: description
+        description: '{{ doc("description") }}'
       - name: category_key
+        description: '{{ doc("category_key") }}'
         data_tests:
           - not_null
           - relationships:
               arguments:
-                to: ref('dim_category')
+                to: "ref('dim_category')"
                 field: category_key
       - name: owner_key
         description: Credits only; NULL for debits.
         data_tests:
           - relationships:
               arguments:
-                to: ref('dim_owner')
+                to: "ref('dim_owner')"
                 field: owner_key
       - name: payment_method_key
         description: Debits only; NULL for credits.
         data_tests:
           - relationships:
               arguments:
-                to: ref('dim_payment_method')
+                to: "ref('dim_payment_method')"
                 field: payment_method_key
       - name: purchase_id
         description: The installment purchase this row belongs to; NULL if not an installment.
         data_tests:
           - relationships:
               arguments:
-                to: ref('int_installment_purchases')
+                to: "ref('int_installment_purchases')"
                 field: purchase_id
       - name: amount
-        description: Amount as typed, always positive; `side` says the direction.
+        description: >
+          Amount as typed; `side` says the direction. Positive except card adjustments, which
+          are negative (a discount on the card bill).
+        data_tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 0
+                row_condition: not is_card_adjustment
       - name: effective_amount
         description: amount if is_effective, else 0.
       - name: signed_effective_amount
         description: effective_amount, positive for credits and negative for debits.
+      - name: is_settled
+        description: '{{ doc("is_settled") }}'
+      - name: is_effective
+        description: '{{ doc("is_effective") }}'
+      - name: is_dividend
+        description: '{{ doc("is_dividend") }}'
+      - name: is_investment_contribution
+        description: '{{ doc("is_investment_contribution") }}'
+      - name: is_card_adjustment
+        description: '{{ doc("is_card_adjustment") }}'
+      - name: is_installment
+        description: '{{ doc("is_installment") }}'
+      - name: installment_number
+        description: '{{ doc("installment_number") }}'
+      - name: installment_count
+        description: '{{ doc("installment_count") }}'
+      - name: source_file
+        description: '{{ doc("source_file") }}'
+      - name: source_sheet
+        description: '{{ doc("source_sheet") }}'
+      - name: source_row
+        description: '{{ doc("source_row") }}'
     data_tests:
       - dbt_utils.expression_is_true:
           arguments:
             expression: "(side = 'credit') = (owner_key is not null)"
           config:
-            description: Credits have an owner and debits don't.
+            description: "Credits have an owner and debits don't."
       - dbt_utils.expression_is_true:
           arguments:
             expression: "(side = 'debit') = (payment_method_key is not null)"
           config:
-            description: Debits have a payment method and credits don't.
+            description: "Debits have a payment method and credits don't."
+      - dbt_expectations.expect_table_row_count_to_equal_other_table:
+          arguments:
+            compare_model: "ref('stg_transactions')"
 
   - name: fct_installments
     description: >
-      One row per installment of every purchase, recorded in the workbooks or
-      not. The sum of outstanding_amount is what is still owed.
+      One row per installment of every purchase, recorded in the workbooks or not. The sum
+      of outstanding_amount is what is still owed.
     columns:
       - name: installment_id
+        description: '{{ doc("installment_id") }}'
         data_tests:
           - unique
           - not_null
       - name: purchase_id
+        description: '{{ doc("purchase_id") }}'
         data_tests:
           - not_null
           - relationships:
               arguments:
-                to: ref('int_installment_purchases')
+                to: "ref('int_installment_purchases')"
                 field: purchase_id
+      - name: installment_number
+        description: '{{ doc("installment_number") }}'
+      - name: installment_count
+        description: '{{ doc("installment_count") }}'
       - name: budget_month
+        description: '{{ doc("budget_month") }}'
         data_tests:
           - not_null
+          - is_first_day_of_month
           - relationships:
               arguments:
-                to: ref('dim_date')
+                to: "ref('dim_date')"
                 field: date_day
+      - name: description
+        description: '{{ doc("description") }}'
       - name: category_key
+        description: '{{ doc("category_key") }}'
         data_tests:
           - relationships:
               arguments:
-                to: ref('dim_category')
+                to: "ref('dim_category')"
                 field: category_key
       - name: payment_method_key
+        description: '{{ doc("payment_method_key") }}'
         data_tests:
           - relationships:
               arguments:
-                to: ref('dim_payment_method')
+                to: "ref('dim_payment_method')"
                 field: payment_method_key
       - name: transaction_id
         description: The workbook row of this installment; NULL if it falls outside the workbooks.
@@ -168,27 +257,74 @@ models:
           - unique
           - relationships:
               arguments:
-                to: ref('fct_transactions')
+                to: "ref('fct_transactions')"
                 field: transaction_id
+      - name: amount
+        description: '{{ doc("amount") }}'
       - name: outstanding_amount
         description: amount if not settled, else 0.
       - name: is_recorded
         description: True if the installment is in the workbooks.
+      - name: is_settled
+        description: >
+          True before the as-of month (the newest month with a settled transaction): past
+          installments are always paid. From then on, the sheet's status for a recorded installment,
+          and false for one past the newest workbook.
     data_tests:
       - dbt_utils.unique_combination_of_columns:
           arguments:
-            combination_of_columns: ["purchase_id", "installment_number"]
+            combination_of_columns:
+              - purchase_id
+              - installment_number
+      - dbt_expectations.expect_column_pair_values_A_to_be_greater_than_B:
+          arguments:
+            column_A: installment_count
+            column_B: installment_number
+            or_equal: true
 
   - name: fct_portfolio_snapshots
     description: One row per asset per reference date.
     columns:
       - name: snapshot_id
+        description: '{{ doc("snapshot_id") }}'
         data_tests:
           - unique
           - not_null
       - name: reference_date
+        description: '{{ doc("reference_date") }}'
         data_tests:
           - not_null
+      - name: bank
+        description: '{{ doc("bank") }}'
+      - name: asset
+        description: '{{ doc("asset") }}'
       - name: asset_class
+        description: '{{ doc("asset_class") }}'
         data_tests:
           - not_null
+      - name: gross_value
+        description: '{{ doc("gross_value") }}'
+        data_tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 0
+      - name: allocation_pct
+        description: "Share of the snapshot's total, 0 to 1; NULL in snapshots that didn't\
+          \ report it."
+        data_tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 0
+                max_value: 1
+      - name: maturity_date
+        description: '{{ doc("maturity_date") }}'
+      - name: mom
+        description: '{{ doc("mom") }}'
+      - name: yoy
+        description: '{{ doc("yoy") }}'
+      - name: net_value_at_maturity
+        description: '{{ doc("net_value_at_maturity") }}'
+      - name: return_to_date
+        description: '{{ doc("return_to_date") }}'
+      - name: return_at_maturity
+        description: '{{ doc("return_at_maturity") }}'

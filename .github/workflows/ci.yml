@@ -61,5 +61,9 @@ jobs:
         working-directory: dbt
         run: dbt source freshness
 
+      - name: dbt docs generate
+        working-directory: dbt
+        run: dbt docs generate
+
       - name: Lint SQL
         run: sqlfluff lint dbt/models

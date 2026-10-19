@@ -3,44 +3,117 @@ version: 2
 sources:
   - name: raw
     description: >
-      Literal extract of the yearly workbooks, loaded by
-      `python -m ingestion.extract_sheets`. Each file reloads by
-      `source_file`, so re-runs are idempotent.
+      Literal extract of the yearly workbooks, loaded by `python -m ingestion.extract_sheets`.
+      Each file reloads by `source_file`, so re-runs are idempotent.
     schema: raw
     config:
       loaded_at_field: extracted_at
       freshness:
-        warn_after: {count: 35, period: day}
+        warn_after:
+          count: 35
+          period: day
     tables:
       - name: transactions
         description: One row per side (credit or debit) of each non-empty month-sheet row.
         columns:
           - name: transaction_id
-            description: "`sha256(source_file|source_sheet|source_row|side)[:16]`."
+            description: '`sha256(source_file|source_sheet|source_row|side)[:16]`.'
             data_tests:
               - unique
               - not_null
+              - dbt_expectations.expect_column_values_to_match_regex:
+                  arguments:
+                    regex: ^[0-9a-f]{16}$
+          - name: source_file
+            description: '{{ doc("source_file") }}'
+          - name: source_sheet
+            description: '{{ doc("source_sheet") }}'
+          - name: source_row
+            description: '{{ doc("source_row") }}'
+          - name: extracted_at
+            description: '{{ doc("extracted_at") }}'
           - name: side
+            description: '{{ doc("side") }}'
             data_tests:
               - accepted_values:
                   arguments:
-                    values: ["credit", "debit"]
+                    values:
+                      - credit
+                      - debit
+          - name: description
+            description: '{{ doc("raw__description") }}'
+          - name: category
+            description: '{{ doc("raw__category") }}'
+          - name: macro_category
+            description: '{{ doc("raw__macro_category") }}'
+          - name: amount
+            description: '{{ doc("amount") }}'
+          - name: transaction_date
+            description: '{{ doc("transaction_date") }}'
           - name: status
             description: "'Sim' (paid) or 'Não' (not yet), as typed."
-
+          - name: description_color_type
+            description: '{{ doc("color_type") }}'
+          - name: description_color_value
+            description: '{{ doc("color_value") }}'
+          - name: amount_color_type
+            description: '{{ doc("color_type") }}'
+          - name: amount_color_value
+            description: '{{ doc("color_value") }}'
       - name: portfolio_snapshots
         description: >
-          One row per holding per snapshot block of the "Situação Atual"
-          sheet. Every year's file repeats the whole history.
-
+          One row per holding per snapshot block of the "Situação Atual" sheet. Every year's
+          file repeats the whole history.
+        columns:
+          - name: source_file
+            description: '{{ doc("source_file") }}'
+          - name: source_block_row
+            description: '{{ doc("source_block_row") }}'
+          - name: extracted_at
+            description: '{{ doc("extracted_at") }}'
+          - name: reference_date
+            description: '{{ doc("reference_date") }}'
+          - name: bank
+            description: '{{ doc("raw__bank") }}'
+          - name: asset
+            description: '{{ doc("raw__asset") }}'
+          - name: gross_value
+            description: '{{ doc("gross_value") }}'
+          - name: allocation_pct
+            description: '{{ doc("allocation_pct") }}'
+          - name: maturity_date
+            description: '{{ doc("maturity_date") }}'
+          - name: mom
+            description: '{{ doc("mom") }}'
+          - name: yoy
+            description: '{{ doc("yoy") }}'
+          - name: net_value_at_maturity
+            description: '{{ doc("net_value_at_maturity") }}'
+          - name: return_to_date
+            description: '{{ doc("return_to_date") }}'
+          - name: return_at_maturity
+            description: '{{ doc("return_at_maturity") }}'
       - name: category_config
         description: Canonical category list, from the 2026 "Configurações" sheet.
         config:
           freshness: null
-
-      - name: workbook_themes
-        description: Each workbook's theme palette, to resolve `theme` color references.
         columns:
+          - name: category_type
+            description: '{{ doc("category_type") }}'
+          - name: category
+            description: '{{ doc("raw__category") }}'
+          - name: macro_category
+            description: '{{ doc("raw__macro_category") }}'
+      - name: workbook_themes
+        description: "Each workbook's theme palette, to resolve `theme` color references."
+        columns:
+          - name: source_file
+            description: '{{ doc("source_file") }}'
+          - name: extracted_at
+            description: '{{ doc("extracted_at") }}'
           - name: theme_index
+            description: '{{ doc("theme_index") }}'
             data_tests:
               - not_null
+          - name: hex
+            description: '{{ doc("hex") }}'

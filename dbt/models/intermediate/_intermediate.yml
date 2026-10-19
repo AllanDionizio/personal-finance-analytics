@@ -3,39 +3,71 @@ version: 2
 models:
   - name: int_installment_transactions
     description: >
-      Installment debits of stg_transactions (an income received in
-      installments is not owed), each tagged with its purchase_id:
-      a hash of description, category, payment method, installment count,
-      amount and the month of the first installment.
+      Installment debits of stg_transactions (an income received in installments is not owed),
+      each tagged with its purchase_id: a hash of description, category, payment method, installment
+      count, amount and the month of the first installment.
     columns:
       - name: transaction_id
+        description: '{{ doc("transaction_id") }}'
         data_tests:
           - unique
           - not_null
       - name: purchase_id
+        description: '{{ doc("purchase_id") }}'
         data_tests:
           - not_null
+      - name: installment_number
+        description: '{{ doc("installment_number") }}'
+      - name: installment_count
+        description: '{{ doc("installment_count") }}'
       - name: first_budget_month
         description: budget_month minus (installment_number - 1) months.
+      - name: budget_month
+        description: '{{ doc("budget_month") }}'
+      - name: transaction_date
+        description: '{{ doc("transaction_date") }}'
+      - name: description
+        description: '{{ doc("description") }}'
+      - name: category_key
+        description: '{{ doc("category_key") }}'
+      - name: category
+        description: '{{ doc("category") }}'
+      - name: payment_method
+        description: '{{ doc("payment_method") }}'
+      - name: amount
+        description: '{{ doc("amount") }}'
+      - name: is_settled
+        description: '{{ doc("is_settled") }}'
     data_tests:
       - dbt_utils.unique_combination_of_columns:
           arguments:
-            combination_of_columns: ["purchase_id", "installment_number"]
+            combination_of_columns:
+              - purchase_id
+              - installment_number
           config:
             description: Two purchases never share a key (which would merge their installments).
 
   - name: int_installment_purchases
     description: >
-      One row per purchase paid in installments, rebuilt from its installment
-      rows. A purchase is identified by description, category, payment
-      method, installment count, installment amount and the month of its
-      first installment (see int_installment_transactions).
+      One row per purchase paid in installments, rebuilt from its installment rows. A purchase
+      is identified by description, category, payment method, installment count, installment
+      amount and the month of its first installment (see int_installment_transactions).
     columns:
       - name: purchase_id
+        description: '{{ doc("purchase_id") }}'
         data_tests:
           - unique
           - not_null
+      - name: description
+        description: '{{ doc("description") }}'
+      - name: category_key
+        description: '{{ doc("category_key") }}'
+      - name: category
+        description: '{{ doc("category") }}'
+      - name: payment_method
+        description: '{{ doc("payment_method") }}'
       - name: installment_count
+        description: '{{ doc("installment_count") }}'
         data_tests:
           - not_null
       - name: installment_amount
@@ -53,12 +85,14 @@ models:
       - name: recorded_installments
         description: How many installments the workbooks hold.
       - name: first_recorded_installment
+        description: '{{ doc("first_recorded_installment") }}'
       - name: last_recorded_installment
+        description: '{{ doc("last_recorded_installment") }}'
     data_tests:
       - dbt_utils.expression_is_true:
           arguments:
             expression: >
-              recorded_installments
-              = last_recorded_installment - first_recorded_installment + 1
+              recorded_installments = last_recorded_installment - first_recorded_installment
+              + 1
           config:
             description: No installment is missing between the first and last recorded ones.

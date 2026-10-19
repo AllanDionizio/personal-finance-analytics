@@ -1,14 +1,26 @@
 -- One row per installment of every purchase, including the ones that fall
 -- outside the workbooks' years. Answers "how much is still owed": the sum of
--- `outstanding_amount`. An installment not in the workbooks is settled if it
--- comes before the first recorded one (paid before 2021) and outstanding if
--- it comes after the last (due after the newest workbook).
+-- `outstanding_amount`.
+--
+-- Every installment before the as-of month (the newest month with a settled
+-- transaction) counts as paid: in the sheets a past installment is always
+-- paid, so a leftover 'Não' is a typing slip, and installments before 2021
+-- aren't in any workbook. From the as-of month on, a recorded installment
+-- keeps its status, and one past the newest workbook is outstanding.
 
 with
 
 purchases as (
 
     select * from {{ ref('int_installment_purchases') }}
+
+),
+
+as_of as (
+
+    select max(budget_month) as as_of_month
+    from {{ ref('stg_transactions') }}
+    where is_settled
 
 ),
 
@@ -47,15 +59,23 @@ installments as (
         schedule.installment_amount as amount,
         recorded.transaction_id,
         recorded.transaction_id is not null as is_recorded,
-        coalesce(
-            recorded.is_settled,
-            schedule.installment_number < schedule.first_recorded_installment
-        ) as is_settled
+        recorded.is_settled as recorded_is_settled
     from schedule
     left join recorded
         on
             schedule.purchase_id = recorded.purchase_id
             and schedule.installment_number = recorded.installment_number
+
+),
+
+settled as (
+
+    select
+        installments.*,
+        installments.budget_month < as_of.as_of_month
+        or coalesce(installments.recorded_is_settled, false) as is_settled
+    from installments
+    cross join as_of
 
 )
 
@@ -74,4 +94,4 @@ select
     case when is_settled then 0 else amount end as outstanding_amount,
     is_recorded,
     is_settled
-from installments
+from settled
