@@ -247,6 +247,10 @@ template. For the template these workbooks use:
 | 8 | accent5 | `#4BACC6` | **Person A** |
 | 9 | accent6 | `#F79646` | **Person B** |
 
+The synthetic workbooks carry openpyxl's default Office theme, which differs
+in the neutral slots (2 = `#1F497D`, 3 = `#EEECE1`) and adds 10 and 11
+(hyperlink colors). The owner slots, 8 and 9, are the same in both.
+
 **Mapping** (after resolving theme → hex):
 
 | Resolved hex | Dimension | Value |
