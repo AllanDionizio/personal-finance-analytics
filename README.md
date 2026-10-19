@@ -6,11 +6,11 @@
 
 > An end-to-end analytics engineering project that turns six years of household finance spreadsheets into a tested star schema and a self-serve dashboard.
 
-🚧 **Work in progress.** Ingestion, the synthetic dataset and the dbt staging layer are done. The marts and dashboard are being built; see [Roadmap](#roadmap).
+🚧 **Work in progress.** Ingestion, the synthetic dataset and the dbt models are done. The dashboard is being built; see [Roadmap](#roadmap).
 
 ## Why this project
 
-For six years, a couple tracked every transaction in yearly Google Sheets workbooks. The sheets work for data entry but can't answer cross-year questions: how fixed costs evolved, how much is still owed in installments, how the investment portfolio grew. Half of the meaning isn't even in the cells: **who spent** and **which card was used** are encoded as cell background colors.
+For six years, a couple tracked every transaction in yearly Google Sheets workbooks. The sheets work for data entry but can't answer cross-year questions: how fixed costs evolved, how much is still owed in installments, how the investment portfolio grew. Half of the meaning isn't even in the cells: **whose income it was** and **which card paid** are encoded as cell background colors.
 
 This project extracts that data, colors included, into DuckDB and models it with dbt so those questions become simple queries.
 
@@ -40,11 +40,12 @@ Output is deterministic for a given seed, so tests and CI always see the same da
 
 ## Data model
 
-Planned star schema (full design in [`docs/data-model.md`](docs/data-model.md)):
+Star schema built by dbt in three layers: staging cleans and types the raw tables, intermediate rebuilds installment purchases, and marts hold the facts and dimensions (full design in [`docs/data-model.md`](docs/data-model.md)):
 
 | Model | Type | Grain | Description |
 | --- | --- | --- | --- |
 | `fct_transactions` | Fact | One row per transaction | Credits and debits, with installment and effective-amount flags |
+| `fct_installments` | Fact | One row per installment of every purchase | Full installment plans, including installments outside the workbooks' years; answers how much is still owed |
 | `fct_portfolio_snapshots` | Fact | One row per asset per reference date | Investment portfolio history |
 | `dim_date` | Dimension | One row per day | Generated calendar |
 | `dim_category` | Dimension | One row per category | Category, macro-category (fixed / variable), type |
@@ -57,7 +58,8 @@ Planned star schema (full design in [`docs/data-model.md`](docs/data-model.md)):
 - End-to-end tests that generate the synthetic workbooks, run the ingestion and check what lands in DuckDB
 - Bugs are pinned as strict `xfail` tests first, so the fix has to flip them to passing (see the next section)
 - dbt data tests on every staging key and accepted-value set, plus source freshness on the raw tables
-- dbt unit tests that pin the staging rules (installment parsing, per-workbook theme colors, card precedence, macro-category fallback, snapshot dedup) on hand-made rows
+- dbt unit tests that pin the modeling rules (installment parsing, per-workbook theme colors, card precedence, macro-category fallback, snapshot dedup, asset aliases, installments outside the workbooks) on hand-made rows
+- Relationship tests from every fact key to its dimension
 - `dbt build` on every pull request, on a warehouse rebuilt from the synthetic workbooks
 
 ## Bugs the synthetic data caught
@@ -114,7 +116,7 @@ No credentials or real data needed. The ingestion is idempotent: re-running on t
 - [x] Repository standards: CI, pre-commit, lint
 - [x] Synthetic dataset with the same structure as the real workbooks
 - [x] dbt staging, with unit and data tests
-- [ ] dbt intermediate and marts
+- [x] dbt intermediate and marts
 - [ ] dbt tests and published dbt docs
 - [ ] Evidence dashboard, deployed on the synthetic data
 
