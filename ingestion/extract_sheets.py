@@ -1,13 +1,15 @@
 """
 Literal extraction of the source workbooks into DuckDB's ``raw.*`` layer.
 
-Reads every ``.xlsx`` in ``--xlsx-dir`` and loads three tables:
+Reads every ``.xlsx`` in ``--xlsx-dir`` and loads four tables:
 
 - ``raw.transactions``        — one row per transaction (credit side and
   debit side of the month sheets), with cell colors kept as raw data.
 - ``raw.portfolio_snapshots`` — historical snapshots from the "Situação
   Atual" sheet.
 - ``raw.category_config``     — the canonical category list (2026 file only).
+- ``raw.workbook_themes``     — each workbook's theme palette, so staging can
+  resolve ``theme`` color references per file.
 
 Raw layer principles (see ``docs/data-model.md``):
 
@@ -501,11 +503,19 @@ CREATE TABLE IF NOT EXISTS raw.category_config (
     category       VARCHAR,
     macro_category VARCHAR
 );
+
+CREATE TABLE IF NOT EXISTS raw.workbook_themes (
+    source_file  VARCHAR,
+    extracted_at TIMESTAMP,
+    theme_index  INTEGER,
+    hex          VARCHAR
+);
 """
 
 _INSERT_TRANSACTIONS = "INSERT INTO raw.transactions VALUES (" + ",".join(["?"] * 16) + ")"
 _INSERT_SNAPSHOTS = "INSERT INTO raw.portfolio_snapshots VALUES (" + ",".join(["?"] * 14) + ")"
 _INSERT_CATEGORIES = "INSERT INTO raw.category_config VALUES (?, ?, ?)"
+_INSERT_THEMES = "INSERT INTO raw.workbook_themes VALUES (?, ?, ?, ?)"
 
 
 def _create_schema(con: duckdb.DuckDBPyConnection) -> None:
@@ -530,6 +540,21 @@ def _reload_categories(con: duckdb.DuckDBPyConnection, rows: list[tuple]) -> Non
     con.execute("DELETE FROM raw.category_config")
     if rows:
         con.executemany(_INSERT_CATEGORIES, rows)
+
+
+def _reload_themes(con: duckdb.DuckDBPyConnection, source_file: str, rows: list[tuple]) -> None:
+    con.execute("DELETE FROM raw.workbook_themes WHERE source_file = ?", [source_file])
+    if rows:
+        con.executemany(_INSERT_THEMES, rows)
+
+
+def theme_rows(source_file: str, palette: list[str | None], extracted_at: datetime) -> list[tuple]:
+    """One row per theme index, in the order ``theme`` color references use.
+
+    Entries that can't be resolved statically keep a NULL hex, so the index
+    positions stay aligned with the workbook.
+    """
+    return [(source_file, extracted_at, i, hex_color) for i, hex_color in enumerate(palette)]
 
 
 # --------------------------------------------------------------------------
@@ -566,6 +591,7 @@ def process_file(
         elif _is_config_sheet(sheet_name) and year == CONFIG_SOURCE_YEAR:
             categories.extend(extract_categories(ws))
 
+    _reload_themes(con, source_file, theme_rows(source_file, palette, extracted_at))
     _reload_transactions(con, source_file, transactions)
     _reload_snapshots(con, source_file, snapshots)
     if categories:

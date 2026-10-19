@@ -93,6 +93,17 @@ Canonical category list: the "Configurações" sheet of the **2026** file.
 | `category` | VARCHAR |
 | `macro_category` | `'Fixo'`, `'Variável'`, `'n/a'` (expenses only) |
 
+### `raw.workbook_themes`
+
+Each workbook's theme palette, so staging can resolve `theme` color
+references per file (see 6.2).
+
+| Column | Type | Description |
+|---|---|---|
+| `source_file`, `extracted_at` | | provenance |
+| `theme_index` | INTEGER | position in the theme's color scheme |
+| `hex` | VARCHAR | 6-char uppercase hex; NULL if not resolvable statically |
+
 ## 3. Staging (planned)
 
 ### `stg_transactions`
@@ -168,7 +179,7 @@ MacroCategoria). The ingestion detects the header at runtime.
 | Col J (MacroCategoria, 2022+) | `macro_category` | 2021: joined from `stg_categories` |
 | Col K/J (Categoria) | `category` | |
 | Col L/K (Valor) | `amount` | |
-| **Col I or amount fill color** | `payment_method` | see 6.2 |
+| **Amount fill color, else col I** | `payment_method` | see 6.2 |
 | Col M/L (Data) | `transaction_date` | |
 | Col N/M (OK) | `is_settled` | |
 | — | `side = 'debit'` | |
@@ -193,6 +204,11 @@ Stacked blocks, each opened by a `Data Referência:` marker. The ingestion:
 
 Rows holding the `'-'` placeholder are skipped.
 
+### `xl/theme/theme1.xml` → `raw.workbook_themes`
+
+Every file: one row per entry of the theme's color scheme, in XML order,
+which is the index a `theme` color reference points to.
+
 ## 6. Transformation rules
 
 ### 6.1 Installment tag in the description
@@ -212,8 +228,11 @@ e.g. `FF4BACC6`) and others as `type='theme'` (an index into the workbook
 theme, e.g. `theme=9, tint=0.0`), for the same visible color. Both have to
 resolve to the same value.
 
-**Theme resolution**: parse `xl/theme/theme1.xml` from the XLSX. For the
-template these workbooks use:
+**Theme resolution**: the ingestion loads each workbook's
+`xl/theme/theme1.xml` into `raw.workbook_themes`, and staging joins a
+`theme` reference to the palette of the same `source_file`. Resolving per
+file keeps the mapping right even if a workbook was made from another
+template. For the template these workbooks use:
 
 | Index | Name | Hex | Meaning |
 |---|---|---|---|
@@ -239,6 +258,11 @@ template these workbooks use:
 | `8E7CC3` | payment method | Card B |
 | `9FC5E8` | payment method | Card C |
 | anything else | payment method | Other |
+
+**Debit precedence**: the payment method comes from the amount cell's color
+when it is a known card, else from the description cell's. A manual
+highlight (e.g. yellow) on the description never becomes a card, so a
+highlighted row keeps the card from its amount cell.
 
 **2021 rule**: the 2021 file doesn't color credits by owner, so its credits
 default to `'Person A'`.
@@ -306,8 +330,9 @@ any later correction to an old block.
 3. **Portfolio history** → load every snapshot, not just the latest
 4. **Canonical categories** → the 2026 file
 5. **Zero-amount rows** → kept
-6. **Google Sheets theme colors** → resolved by parsing `theme1.xml`; one mapping for rgb and theme
+6. **Google Sheets theme colors** → each workbook's `theme1.xml` loaded into `raw.workbook_themes` and resolved per file in staging; one mapping for rgb and theme
 7. **Data entry UI** → out of scope; ingestion, modeling and dashboards come first
+8. **Debit payment method** → amount cell color first, description cell color as fallback
 
 ## 8. Bugs found with the synthetic data (fixed)
 
