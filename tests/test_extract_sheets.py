@@ -105,3 +105,32 @@ def test_snapshot_sums_match_the_portfolio(con) -> None:
     """
     loaded = {when: round(float(total), 2) for when, total in con.execute(sql).fetchall()}
     assert loaded == expected
+
+
+def test_every_workbook_has_its_theme_palette(con) -> None:
+    files = {
+        f for (f,) in con.execute("select distinct source_file from raw.transactions").fetchall()
+    }
+    themed = {
+        f for (f,) in con.execute("select distinct source_file from raw.workbook_themes").fetchall()
+    }
+    assert themed == files
+
+
+def test_theme_colors_resolve_through_the_workbook_palette(con) -> None:
+    """Every theme reference in a transaction has a palette entry in the same file,
+    and the owner indexes resolve to the owners' hex colors."""
+    sql = """
+        select t.amount_color_value::int as theme_index, th.hex, count(*)
+        from raw.transactions t
+        left join raw.workbook_themes th
+          on th.source_file = t.source_file
+         and th.theme_index = t.amount_color_value::int
+        where t.amount_color_type = 'theme'
+        group by all
+    """
+    resolved = {idx: hex_color for idx, hex_color, _ in con.execute(sql).fetchall()}
+    assert resolved == {
+        catalog.PERSON_A_THEME: catalog.PERSON_A_RGB[2:],
+        catalog.PERSON_B_THEME: catalog.PERSON_B_RGB[2:],
+    }
