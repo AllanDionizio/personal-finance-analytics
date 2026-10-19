@@ -60,6 +60,9 @@ Star schema built by dbt in three layers: staging cleans and types the raw table
 - dbt data tests on every staging key and accepted-value set, plus source freshness on the raw tables
 - dbt unit tests that pin the modeling rules (installment parsing, per-workbook theme colors, card precedence, macro-category fallback, snapshot dedup, asset aliases, installments outside the workbooks) on hand-made rows
 - Relationship tests from every fact key to its dimension
+- Reconciliation tests: every raw transaction reaches the fact with its amount, each portfolio snapshot total matches its newest source file, and each installment plan adds up to its purchase
+- Range and row-count checks with `dbt_expectations`, plus a custom generic test (`is_first_day_of_month`) on every `budget_month`
+- Every model and source column documented, shared definitions written once as doc blocks
 - `dbt build` on every pull request, on a warehouse rebuilt from the synthetic workbooks
 
 ## Bugs the synthetic data caught
@@ -117,7 +120,8 @@ No credentials or real data needed. The ingestion is idempotent: re-running on t
 - [x] Synthetic dataset with the same structure as the real workbooks
 - [x] dbt staging, with unit and data tests
 - [x] dbt intermediate and marts
-- [ ] dbt tests and published dbt docs
+- [x] dbt tests and column docs
+- [ ] dbt docs published on GitHub Pages
 - [ ] Evidence dashboard, deployed on the synthetic data
 
 ## Repository structure
