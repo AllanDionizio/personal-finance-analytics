@@ -126,7 +126,8 @@ models:
     description: >
       One row per holding per reference date, keeping only the newest file's
       copy of each snapshot. Bank names are normalized to their most frequent
-      spelling, and each asset gets an inferred asset class.
+      spelling, notes typed over an asset name map back to the asset, and
+      each asset gets an inferred asset class.
     columns:
       - name: snapshot_id
         description: Surrogate key of (reference_date, bank, asset).
@@ -140,8 +141,11 @@ models:
         data_tests:
           - not_null
       - name: asset
+        description: Asset name trimmed, with typed-over notes mapped back (seed asset_aliases).
         data_tests:
           - not_null
+      - name: raw_asset
+        description: Asset name as typed.
       - name: asset_class
         data_tests:
           - accepted_values:

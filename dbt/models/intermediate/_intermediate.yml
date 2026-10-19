@@ -1,0 +1,64 @@
+version: 2
+
+models:
+  - name: int_installment_transactions
+    description: >
+      Installment debits of stg_transactions (an income received in
+      installments is not owed), each tagged with its purchase_id:
+      a hash of description, category, payment method, installment count,
+      amount and the month of the first installment.
+    columns:
+      - name: transaction_id
+        data_tests:
+          - unique
+          - not_null
+      - name: purchase_id
+        data_tests:
+          - not_null
+      - name: first_budget_month
+        description: budget_month minus (installment_number - 1) months.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ["purchase_id", "installment_number"]
+          config:
+            description: Two purchases never share a key (which would merge their installments).
+
+  - name: int_installment_purchases
+    description: >
+      One row per purchase paid in installments, rebuilt from its installment
+      rows. A purchase is identified by description, category, payment
+      method, installment count, installment amount and the month of its
+      first installment (see int_installment_transactions).
+    columns:
+      - name: purchase_id
+        data_tests:
+          - unique
+          - not_null
+      - name: installment_count
+        data_tests:
+          - not_null
+      - name: installment_amount
+        description: Amount of each installment.
+      - name: total_amount
+        description: installment_amount × installment_count.
+      - name: first_budget_month
+        description: Month of the first installment, recorded or not.
+        data_tests:
+          - not_null
+      - name: last_budget_month
+        description: Month of the last installment, recorded or not.
+      - name: first_transaction_date
+        description: Earliest date on a recorded installment (the purchase date for card purchases).
+      - name: recorded_installments
+        description: How many installments the workbooks hold.
+      - name: first_recorded_installment
+      - name: last_recorded_installment
+    data_tests:
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: >
+              recorded_installments
+              = last_recorded_installment - first_recorded_installment + 1
+          config:
+            description: No installment is missing between the first and last recorded ones.

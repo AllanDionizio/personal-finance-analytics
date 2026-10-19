@@ -18,5 +18,5 @@ capitalisation_policy = lower
 extended_capitalisation_policy = lower
 
 [sqlfluff:rules:references.keywords]
-# `owner` is a column of the data model (who earned a credit)
-ignore_words = owner
+# Column names of the data model: who earned a credit, and dim_date's parts
+ignore_words = owner,year,quarter,month

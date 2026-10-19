@@ -1,7 +1,7 @@
 # Data model
 
 Design doc for the data layer: architecture, the raw tables the ingestion
-loads, the staging models and the planned marts, how each source field maps into
+loads, the staging, intermediate and marts models, how each source field maps into
 them, and the transformation rules and decisions behind them.
 
 **Stack:** Python (ingestion) → DuckDB (storage) → dbt (modeling) → Evidence (dashboards)
@@ -152,7 +152,20 @@ files (seed `legacy_categories`, e.g. `'Farmácia'`, `'Uber'`), keyed by
 translated: `'Fixo'` → `'Fixed'`, `'Variável'` → `'Variable'`, `'n/a'` →
 `'Not applicable'`.
 
-## 4. Marts (planned)
+## 4. Intermediate and marts
+
+### Intermediate (views in `intermediate`)
+
+| Model | Grain | Purpose |
+|---|---|---|
+| `int_installment_transactions` | one row per installment debit of `stg_transactions` | tags each row with its `purchase_id` (6.9) |
+| `int_installment_purchases` | one row per installment purchase | the whole plan: count, amount, first and last month, which installments the workbooks hold |
+
+### Marts (tables in `marts`)
+
+Foreign keys are never NULL where the dimension applies: a category in no
+list points to the `'unknown'` member of `dim_category`. `owner_key` is NULL
+on debits and `payment_method_key` on credits, which a test enforces.
 
 | Model | Grain | Key columns |
 |---|---|---|
@@ -160,7 +173,8 @@ translated: `'Fixo'` → `'Fixed'`, `'Variável'` → `'Variable'`, `'n/a'` →
 | `dim_category` | one row per category and type | `category_key`, `category`, `macro_category`, `category_type` |
 | `dim_owner` | one row per owner | `owner_key`, `owner`, `source_color` (`'#4BACC6'`) |
 | `dim_payment_method` | one row per payment method | `payment_method_key`, `payment_method`, `method_type` (`'credit_card'` / `'other'`), `source_color` |
-| `fct_transactions` | one row per transaction | `transaction_id`; FKs to the dims for `transaction_date`, `budget_month`, category, owner, payment method; `amount`, `effective_amount` (amount if effective, else 0); the flags and installment columns of staging |
+| `fct_transactions` | one row per transaction | `transaction_id`; FKs to the dims for `transaction_date`, `budget_month`, category, owner, payment method; `purchase_id` for installments; `amount`, `effective_amount` (amount if effective, else 0), `signed_effective_amount` (+ credits, − debits); the flags and installment columns of staging |
+| `fct_installments` | one row per installment of every purchase | `installment_id`, `purchase_id`, `installment_number`, `budget_month`, `transaction_id` (NULL outside the workbooks), `amount`, `outstanding_amount`, `is_recorded`, `is_settled` (6.9) |
 | `fct_portfolio_snapshots` | one row per asset per reference date | `snapshot_id` (`hash(reference_date\|bank\|asset)`), `reference_date`, `bank`, `asset`, `asset_class` (`'Real estate fund'` / `'Fixed income'` / `'Multimarket fund'` / `'Crypto'` / `'Cash'` / `'Other'`), `gross_value`, `allocation_pct`, `maturity_date`, `mom`, `yoy` |
 
 ## 5. Source → model mapping
@@ -340,6 +354,31 @@ month's real cash impact.
 for each `reference_date`, the rows from the newest file, which also picks up
 any later correction to an old block.
 
+A note typed over an asset name (the 2026 rate change of `'180% CDI'` was
+typed as `'Alterado para 110% CDI'`) maps back to the asset through the
+seed `asset_aliases`, so its history stays one series. `raw_asset` keeps
+the name as typed.
+
+### 6.9 Installment purchases
+
+Each workbook holds only the installments that fall in its year, and there
+is no workbook before 2021 or after the newest year. So a purchase from late
+2020 is missing its first installments, and one from late 2026 its last.
+
+- **Purchase key**: `purchase_id = hash(description, category,
+  payment_method, installment_count, amount, first_budget_month)`, where
+  `first_budget_month = budget_month - (installment_number - 1) months`.
+  The date is left out: a bill paid in installments (e.g. IPTU) carries
+  each payment's own date. A test checks that no two rows of the key share
+  an installment number.
+- **Schedule**: `fct_installments` lays out installments 1 to N of each
+  purchase. A recorded installment keeps its `is_settled`; a missing one is
+  settled if it comes before the first recorded one (paid before 2021) and
+  outstanding if it comes after the last one (due after the newest
+  workbook).
+- **What is still owed**: `sum(outstanding_amount)`. A past installment left
+  as `'Não'` in the sheet also counts as outstanding, as typed.
+
 ## 7. Decisions
 
 1. **2021 credits have no owner color** → default to `'Person A'`
@@ -350,6 +389,8 @@ any later correction to an old block.
 6. **Google Sheets theme colors** → each workbook's `theme1.xml` loaded into `raw.workbook_themes` and resolved per file in staging; one mapping for rgb and theme
 7. **Data entry UI** → out of scope; ingestion, modeling and dashboards come first
 8. **Debit payment method** → amount cell color first, description cell color as fallback
+9. **Asset renamed by a typed note** → mapped back through the seed `asset_aliases`
+10. **Installments outside the workbooks** → rebuilt from the purchase plan in `fct_installments`
 
 ## 8. Bugs found with the synthetic data (fixed)
 

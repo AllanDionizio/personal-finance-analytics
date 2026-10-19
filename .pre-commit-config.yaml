@@ -25,3 +25,5 @@ repos:
         entry: env DUCKDB_PATH=data/warehouse.duckdb sqlfluff lint
         language: system
         files: ^dbt/models/.*\.sql$
+        # One process: parallel batches would fight over the DuckDB file lock
+        require_serial: true

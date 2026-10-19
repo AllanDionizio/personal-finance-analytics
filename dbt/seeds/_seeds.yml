@@ -45,3 +45,24 @@ seeds:
           - not_null
       - name: macro_category
         description: As typed in the source ('Fixo', 'Variável', 'n/a').
+
+  - name: asset_aliases
+    description: >
+      Asset names that are really a note typed over the name (e.g. a rate
+      change), mapped back to the asset, so its history stays one series.
+    columns:
+      - name: bank
+        description: Canonical bank name, as in stg_portfolio_snapshots.
+      - name: raw_asset
+        description: Name as typed in the snapshot.
+        data_tests:
+          - not_null
+      - name: asset
+        description: Asset the row belongs to.
+        data_tests:
+          - not_null
+      - name: reason
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ["bank", "raw_asset"]
