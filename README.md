@@ -6,7 +6,7 @@
 
 > An end-to-end analytics engineering project that turns six years of household finance spreadsheets into a tested star schema and a self-serve dashboard.
 
-🚧 **Work in progress.** Ingestion and the synthetic dataset are done. The dbt models and dashboard are being built; see [Roadmap](#roadmap).
+🚧 **Work in progress.** Ingestion, the synthetic dataset and the dbt staging layer are done. The marts and dashboard are being built; see [Roadmap](#roadmap).
 
 ## Why this project
 
@@ -56,7 +56,9 @@ Planned star schema (full design in [`docs/data-model.md`](docs/data-model.md)):
 - Python unit tests for every ingestion library (color resolution, installment parsing, snapshot block detection)
 - End-to-end tests that generate the synthetic workbooks, run the ingestion and check what lands in DuckDB
 - Bugs are pinned as strict `xfail` tests first, so the fix has to flip them to passing (see the next section)
-- Planned: generic and custom dbt tests on every key, source freshness, `dbt build` on every pull request
+- dbt data tests on every staging key and accepted-value set, plus source freshness on the raw tables
+- dbt unit tests that pin the staging rules (installment parsing, per-workbook theme colors, card precedence, macro-category fallback, snapshot dedup) on hand-made rows
+- `dbt build` on every pull request, on a warehouse rebuilt from the synthetic workbooks
 
 ## Bugs the synthetic data caught
 
@@ -86,11 +88,14 @@ python -m venv .venv && source .venv/bin/activate
 make setup
 ```
 
-Generate the synthetic workbooks and load them into DuckDB:
+Generate the synthetic workbooks, load them into DuckDB and build the dbt project:
 
 ```bash
 make data   # synthetic XLSX → data/synthetic/ → raw.* in data/warehouse.duckdb
+make build  # dbt deps + dbt build (seeds, models, tests) + source freshness
 ```
+
+Or both at once with `make all`.
 
 No credentials or real data needed. The ingestion is idempotent: re-running on the same files reloads by `source_file` without duplicating rows. Unrecognized cell colors are logged with counts instead of failing the run.
 
@@ -108,7 +113,8 @@ No credentials or real data needed. The ingestion is idempotent: re-running on t
 - [x] Ingestion CLI: XLSX → `raw.*` in DuckDB
 - [x] Repository standards: CI, pre-commit, lint
 - [x] Synthetic dataset with the same structure as the real workbooks
-- [ ] dbt staging, intermediate and marts
+- [x] dbt staging, with unit and data tests
+- [ ] dbt intermediate and marts
 - [ ] dbt tests and published dbt docs
 - [ ] Evidence dashboard, deployed on the synthetic data
 
