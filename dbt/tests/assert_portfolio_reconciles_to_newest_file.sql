@@ -21,7 +21,12 @@ newest_raw as (
         reference_date,
         total_value
     from raw_snapshots
-    qualify row_number() over (partition by reference_date order by source_file desc) = 1
+    -- Newest by the year in the file name, as stg_portfolio_snapshots does
+    qualify
+        row_number() over (
+            partition by reference_date
+            order by cast(regexp_extract(source_file, '(20\d{2})', 1) as integer) desc
+        ) = 1
 
 ),
 
