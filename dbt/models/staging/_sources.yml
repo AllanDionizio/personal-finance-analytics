@@ -1,0 +1,46 @@
+version: 2
+
+sources:
+  - name: raw
+    description: >
+      Literal extract of the yearly workbooks, loaded by
+      `python -m ingestion.extract_sheets`. Each file reloads by
+      `source_file`, so re-runs are idempotent.
+    schema: raw
+    config:
+      loaded_at_field: extracted_at
+      freshness:
+        warn_after: {count: 35, period: day}
+    tables:
+      - name: transactions
+        description: One row per side (credit or debit) of each non-empty month-sheet row.
+        columns:
+          - name: transaction_id
+            description: "`sha256(source_file|source_sheet|source_row|side)[:16]`."
+            data_tests:
+              - unique
+              - not_null
+          - name: side
+            data_tests:
+              - accepted_values:
+                  arguments:
+                    values: ["credit", "debit"]
+          - name: status
+            description: "'Sim' (paid) or 'Não' (not yet), as typed."
+
+      - name: portfolio_snapshots
+        description: >
+          One row per holding per snapshot block of the "Situação Atual"
+          sheet. Every year's file repeats the whole history.
+
+      - name: category_config
+        description: Canonical category list, from the 2026 "Configurações" sheet.
+        config:
+          freshness: null
+
+      - name: workbook_themes
+        description: Each workbook's theme palette, to resolve `theme` color references.
+        columns:
+          - name: theme_index
+            data_tests:
+              - not_null

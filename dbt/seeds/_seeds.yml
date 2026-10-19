@@ -1,0 +1,47 @@
+version: 2
+
+seeds:
+  - name: color_mapping
+    description: >
+      Cell background colors that carry meaning in the workbooks. A credit's
+      amount color is its owner; a debit's color is the card it was paid with.
+      Any other color (white, black, no fill, a manual highlight) maps to
+      'Other' in staging.
+    config:
+      column_types:
+        hex: varchar
+        dimension: varchar
+        value: varchar
+    columns:
+      - name: hex
+        description: 6-char uppercase hex, no alpha.
+        data_tests:
+          - unique
+          - not_null
+      - name: dimension
+        description: Which column the color feeds.
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["owner", "payment_method"]
+      - name: value
+        description: Owner or payment method the color stands for.
+        data_tests:
+          - not_null
+
+  - name: legacy_categories
+    description: >
+      Categories typed in old workbooks that are no longer in the canonical
+      list (the 2026 "Configurações" sheet), with the macro-category they
+      would have had.
+    columns:
+      - name: category_type
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["income", "expense"]
+      - name: category
+        data_tests:
+          - not_null
+      - name: macro_category
+        description: As typed in the source ('Fixo', 'Variável', 'n/a').
