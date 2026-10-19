@@ -3,9 +3,8 @@ version: 2
 models:
   - name: stg_categories
     description: >
-      Canonical category list plus the legacy categories that only appear in
-      old workbooks. Category names stay as typed in Portuguese; the
-      macro-category is translated.
+      Canonical category list plus the legacy categories that only appear in old workbooks.
+      Category names stay as typed in Portuguese; the macro-category is translated.
     columns:
       - name: category_key
         description: Surrogate key of (category_type, category).
@@ -13,12 +12,16 @@ models:
           - unique
           - not_null
       - name: category_type
+        description: '{{ doc("category_type") }}'
         data_tests:
           - not_null
           - accepted_values:
               arguments:
-                values: ["income", "expense"]
+                values:
+                  - income
+                  - expense
       - name: category
+        description: '{{ doc("category") }}'
         data_tests:
           - not_null
       - name: macro_category
@@ -26,15 +29,17 @@ models:
         data_tests:
           - accepted_values:
               arguments:
-                values: ["Fixed", "Variable", "Not applicable"]
+                values:
+                  - Fixed
+                  - Variable
+                  - Not applicable
       - name: is_legacy
         description: True if the category comes from the legacy seed, not the canonical list.
 
   - name: stg_transactions
     description: >
-      One row per transaction (a credit or a debit), typed, with owner and
-      payment method resolved from cell colors and the installment tag parsed
-      out of the description.
+      One row per transaction (a credit or a debit), typed, with owner and payment method
+      resolved from cell colors and the installment tag parsed out of the description.
     columns:
       - name: transaction_id
         description: Deterministic id from the ingestion, see data-model 6.5.
@@ -44,14 +49,19 @@ models:
       - name: transaction_date
         description: Original purchase date, as typed. Years back for a late installment.
       - name: budget_month
-        description: First day of the sheet's month in the file's year (`JAN` in the 2026 file → 2026-01-01).
+        description: >-
+          First day of the sheet's month in the file's year (`JAN` in the 2026 file → 2026-01-01).
         data_tests:
           - not_null
+          - is_first_day_of_month
       - name: side
+        description: '{{ doc("side") }}'
         data_tests:
           - accepted_values:
               arguments:
-                values: ["credit", "debit"]
+                values:
+                  - credit
+                  - debit
       - name: description
         description: Description trimmed, without the `(N/M)` installment tag.
       - name: raw_description
@@ -61,7 +71,7 @@ models:
         data_tests:
           - relationships:
               arguments:
-                to: ref('stg_categories')
+                to: "ref('stg_categories')"
                 field: category_key
           - not_null:
               config:
@@ -70,64 +80,89 @@ models:
         description: Category as typed in Portuguese, trimmed.
       - name: macro_category
         description: >
-          Debits only: 'Fixed', 'Variable' or 'Not applicable', from the sheet
-          or the category list. 'Unknown' flags a category missing from both.
+          Debits only: 'Fixed', 'Variable' or 'Not applicable', from the sheet or the category
+          list. 'Unknown' flags a category missing from both.
         data_tests:
           - accepted_values:
               arguments:
-                values: ["Fixed", "Variable", "Not applicable", "Unknown"]
+                values:
+                  - Fixed
+                  - Variable
+                  - Not applicable
+                  - Unknown
           - accepted_values:
               name: no_unknown_macro_category
               arguments:
-                values: ["Fixed", "Variable", "Not applicable"]
+                values:
+                  - Fixed
+                  - Variable
+                  - Not applicable
               config:
                 severity: warn
       - name: amount
+        description: '{{ doc("amount") }}'
         data_tests:
           - not_null:
               config:
                 severity: warn
       - name: owner
-        description: Credits only. 'Person A', 'Person B' or 'Other', from the amount cell's color.
+        description: "Credits only. 'Person A', 'Person B' or 'Other', from the amount cell's\
+          \ color."
         data_tests:
           - accepted_values:
               arguments:
-                values: ["Person A", "Person B", "Other"]
+                values:
+                  - Person A
+                  - Person B
+                  - Other
       - name: payment_method
         description: >
-          Debits only. 'Card A', 'Card B', 'Card C' or 'Other'. The amount
-          cell's color wins; the description cell's is the fallback.
+          Debits only. 'Card A', 'Card B', 'Card C' or 'Other'. The amount cell's color wins;
+          the description cell's is the fallback.
         data_tests:
           - accepted_values:
               arguments:
-                values: ["Card A", "Card B", "Card C", "Other"]
+                values:
+                  - Card A
+                  - Card B
+                  - Card C
+                  - Other
       - name: is_settled
         description: "True when the OK column says 'Sim'."
       - name: is_effective
-        description: Settled and not an investment contribution, so it counts as real cash impact.
+        description: Settled and not an investment contribution, so it counts as real cash
+          impact.
       - name: is_dividend
         description: "Credit in 'Proventos' (real-estate fund dividends)."
       - name: is_investment_contribution
         description: "Debit in 'Investimento': money moved to investments."
       - name: is_card_adjustment
-        description: "Debit in 'Cartão de Crédito': early-payment discount or points cashback, not a purchase."
+        description: >-
+          Debit in 'Cartão de Crédito': early-payment discount or points cashback, not a purchase.
       - name: installment_number
         description: 7 in `(7/12)`, else 1.
       - name: installment_count
         description: 12 in `(7/12)`, else 1.
       - name: is_installment
         description: installment_count > 1.
+      - name: source_file
+        description: '{{ doc("source_file") }}'
+      - name: source_sheet
+        description: '{{ doc("source_sheet") }}'
+      - name: source_row
+        description: '{{ doc("source_row") }}'
+      - name: extracted_at
+        description: '{{ doc("extracted_at") }}'
     data_tests:
       - dbt_utils.expression_is_true:
           arguments:
-            expression: "installment_number between 1 and installment_count"
+            expression: installment_number between 1 and installment_count
 
   - name: stg_portfolio_snapshots
     description: >
-      One row per holding per reference date, keeping only the newest file's
-      copy of each snapshot. Bank names are normalized to their most frequent
-      spelling, notes typed over an asset name map back to the asset, and
-      each asset gets an inferred asset class.
+      One row per holding per reference date, keeping only the newest file's copy of each
+      snapshot. Bank names are normalized to their most frequent spelling, notes typed over
+      an asset name map back to the asset, and each asset gets an inferred asset class.
     columns:
       - name: snapshot_id
         description: Surrogate key of (reference_date, bank, asset).
@@ -135,9 +170,11 @@ models:
           - unique
           - not_null
       - name: reference_date
+        description: '{{ doc("reference_date") }}'
         data_tests:
           - not_null
       - name: bank
+        description: '{{ doc("bank") }}'
         data_tests:
           - not_null
       - name: asset
@@ -147,6 +184,7 @@ models:
       - name: raw_asset
         description: Asset name as typed.
       - name: asset_class
+        description: '{{ doc("asset_class") }}'
         data_tests:
           - accepted_values:
               arguments:
@@ -158,5 +196,26 @@ models:
                   - Cash
                   - Other
       - name: gross_value
+        description: '{{ doc("gross_value") }}'
         data_tests:
           - not_null
+      - name: allocation_pct
+        description: '{{ doc("allocation_pct") }}'
+      - name: maturity_date
+        description: '{{ doc("maturity_date") }}'
+      - name: mom
+        description: '{{ doc("mom") }}'
+      - name: yoy
+        description: '{{ doc("yoy") }}'
+      - name: net_value_at_maturity
+        description: '{{ doc("net_value_at_maturity") }}'
+      - name: return_to_date
+        description: '{{ doc("return_to_date") }}'
+      - name: return_at_maturity
+        description: '{{ doc("return_at_maturity") }}'
+      - name: source_file
+        description: '{{ doc("source_file") }}'
+      - name: source_block_row
+        description: '{{ doc("source_block_row") }}'
+      - name: extracted_at
+        description: '{{ doc("extracted_at") }}'
