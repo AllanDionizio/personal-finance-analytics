@@ -1,4 +1,4 @@
-.PHONY: setup data deps build test docs lint all dashboard dashboard-dev
+.PHONY: setup data deps build test docs lint all dashboard dashboard-dev site
 
 export DBT_PROFILES_DIR := $(CURDIR)/dbt
 # Evidence sends anonymous usage stats unless told not to
@@ -37,6 +37,14 @@ dashboard: dashboards/node_modules
 # Live-reloading dashboard; Evidence prints the local URL
 dashboard-dev: dashboards/node_modules
 	cd dashboards && npm run sources && npm run dev
+
+# The site as GitHub Pages serves it: the dashboard at the root, the dbt docs
+# (one self-contained page) under dbt-docs/. Needs `make build` first.
+site: dashboard
+	cd dbt && dbt docs generate --static
+	rm -rf site && mkdir -p site/dbt-docs
+	cp -r dashboards/build/. site/
+	cp dbt/target/static_index.html site/dbt-docs/index.html
 
 # From a fresh clone to a built warehouse and dashboard
 all: data build dashboard

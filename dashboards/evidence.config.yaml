@@ -49,6 +49,11 @@ theme:
       light: "#b42318"
       dark: "#f07178"
 
+# Served from GitHub Pages under the repository name; links in the pages
+# get this prefix at build time, so they stay written as "/portfolio"
+deployment:
+  basePath: /personal-finance-analytics
+
 plugins:
   components:
     "@evidence-dev/core-components": {}

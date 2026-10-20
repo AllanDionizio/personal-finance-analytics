@@ -64,9 +64,9 @@ jobs:
         working-directory: dbt
         run: dbt source freshness
 
-      - name: dbt docs generate
+      - name: dbt docs generate (plus a self-contained static page)
         working-directory: dbt
-        run: dbt docs generate
+        run: dbt docs generate --static
 
       - name: Lint SQL
         run: sqlfluff lint dbt/models
@@ -88,3 +88,33 @@ jobs:
       - name: Build the dashboard (strict, fails on query or component errors)
         working-directory: dashboards
         run: npm run build:strict
+
+      # Only main is published: the site is exactly what this job just tested
+      - name: Assemble the Pages site
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          mkdir -p site/dbt-docs
+          cp -r dashboards/build/. site/
+          cp dbt/target/static_index.html site/dbt-docs/index.html
+
+      - uses: actions/upload-pages-artifact@v3
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        with:
+          path: site
+
+  deploy:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: pipeline
+    runs-on: ubuntu-24.04
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
