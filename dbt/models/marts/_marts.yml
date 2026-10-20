@@ -282,6 +282,53 @@ models:
             column_B: installment_number
             or_equal: true
 
+  - name: fct_monthly_cashflow
+    description: >
+      One row per closed budget month (every month before the as-of month, the newest one with
+      a settled transaction): income, spending and savings, defined once for the dashboard.
+    columns:
+      - name: budget_month
+        description: '{{ doc("budget_month") }}'
+        data_tests:
+          - unique
+          - not_null
+          - is_first_day_of_month
+          - dbt_utils.sequential_values:
+              arguments:
+                interval: 1
+                datepart: month
+      - name: income
+        description: Settled credits (effective_amount of credits).
+        data_tests:
+          - not_null
+      - name: spending
+        description: >
+          Settled debits, investment contributions excluded (effective_amount of debits). Card
+          adjustments are negative, so they lower it.
+        data_tests:
+          - not_null
+      - name: fixed_spending
+        description: The part of spending in categories whose macro-category is Fixed.
+      - name: variable_spending
+        description: The part of spending in categories whose macro-category is Variable.
+      - name: unclassified_spending
+        description: >
+          The part of spending in categories with neither macro-category (Unknown or blank);
+          0 when every category is classified.
+      - name: invested
+        description: Settled debits into investments, the money left out of spending.
+      - name: savings
+        description: income - spending, i.e. what was invested plus what stayed in the account.
+    data_tests:
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "savings = income - spending"
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "fixed_spending + variable_spending + unclassified_spending = spending"
+          config:
+            description: Every unit of spending lands in exactly one macro-category column.
+
   - name: fct_portfolio_snapshots
     description: One row per asset per reference date.
     columns:

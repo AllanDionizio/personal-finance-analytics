@@ -1,0 +1,31 @@
+appearance:
+  default: system
+  switcher: true
+
+theme:
+  # Categorical order from a palette checked for color-vision deficiency;
+  # the dark steps are tuned for the dark surface, not an automatic flip.
+  colorPalettes:
+    default:
+      light: ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948"]
+      dark: ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#008300", "#9085e9", "#e66767"]
+  colorScales:
+    default:
+      light: ["#cde2fb", "#104281"]
+      dark: ["#184f95", "#cde2fb"]
+  colors:
+    primary:
+      light: "#2a78d6"
+      dark: "#3987e5"
+    positive:
+      light: "#0ca30c"
+      dark: "#0ca30c"
+    negative:
+      light: "#d03b3b"
+      dark: "#d03b3b"
+
+plugins:
+  components:
+    "@evidence-dev/core-components": {}
+  datasources:
+    "@evidence-dev/duckdb": {}

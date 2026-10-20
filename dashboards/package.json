@@ -1,0 +1,24 @@
+{
+  "name": "personal-finance-dashboards",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "sources": "evidence sources",
+    "dev": "evidence dev",
+    "build": "evidence build",
+    "build:strict": "evidence build:strict",
+    "preview": "evidence preview"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "@evidence-dev/core-components": "5.4.2",
+    "@evidence-dev/duckdb": "2.0.1",
+    "@evidence-dev/evidence": "40.1.8"
+  },
+  "overrides": {
+    "typescript": "5.4.2"
+  }
+}
