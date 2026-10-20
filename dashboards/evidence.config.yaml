@@ -1,5 +1,8 @@
+# Dark first, with the switcher for anyone who prefers light. Surfaces follow
+# the "Product" direction: cards (base-100, also the chart background) on a
+# separate ground color, set in components/brand.css.
 appearance:
-  default: system
+  default: dark
   switcher: true
 
 theme:
@@ -14,15 +17,35 @@ theme:
       light: ["#cde2fb", "#104281"]
       dark: ["#184f95", "#cde2fb"]
   colors:
+    # UI blue, one step darker than the chart blue so links pass 4.5:1 on
+    # both the cards and the ground
     primary:
-      light: "#2a78d6"
+      light: "#226cc6"
       dark: "#3987e5"
+    base-100:
+      light: "#ffffff"
+      dark: "#11151b"
+    base-200:
+      light: "#f3f5f7"
+      dark: "#1a2029"
+    base-300:
+      light: "#e3e7ec"
+      dark: "#262d36"
+    base-heading:
+      light: "#111827"
+      dark: "#f3f4f6"
+    base-content:
+      light: "#1f2937"
+      dark: "#dfe3e8"
+    base-content-muted:
+      light: "#4b5563"
+      dark: "#9aa4af"
     positive:
-      light: "#0ca30c"
-      dark: "#0ca30c"
+      light: "#0a6b2e"
+      dark: "#3fb950"
     negative:
-      light: "#d03b3b"
-      dark: "#d03b3b"
+      light: "#b42318"
+      dark: "#f07178"
 
 plugins:
   components:

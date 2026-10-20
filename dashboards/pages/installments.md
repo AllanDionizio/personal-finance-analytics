@@ -20,10 +20,14 @@ select
 from warehouse.installments
 ```
 
+<div class="kpi-grid">
+
 <BigValue data={summary} value=owed title="Still owed" fmt=brl />
 <BigValue data={summary} value=months_of_income title="In months of income" fmt=num1 />
 <BigValue data={summary} value=open_purchases title="Open purchases" />
 <BigValue data={summary} value=paid_off_in title="Last installment" />
+
+</div>
 
 ## What is due each month
 

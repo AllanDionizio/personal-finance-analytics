@@ -31,6 +31,8 @@ order by reference_date desc
 
 ## Latest snapshot, <Value data={worth} column=reference_label />
 
+<div class="kpi-grid">
+
 <BigValue
     data={worth}
     value=total_value
@@ -59,6 +61,8 @@ order by reference_date desc
     title="Liquid reserve, months of fixed costs"
     fmt=num1
 />
+
+</div>
 
 ## Contributions or returns?
 
@@ -274,8 +278,12 @@ select
     (select max(share) from ${by_bank}) as top_bank_share
 ```
 
+<div class="kpi-grid">
+
 <BigValue data={top_assets} value=top_bank_share title="Share of the largest institution" fmt=pct0 />
 <BigValue data={top_assets} value=top5_share title="Share of the 5 largest holdings" fmt=pct0 />
+
+</div>
 
 <DataTable data={by_bank}>
     <Column id=bank title="Institution" />
