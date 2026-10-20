@@ -27,7 +27,8 @@ XLSX workbooks (one per year, exported from Google Sheets)
 - **Database**: DuckDB, a single file (`data/warehouse.duckdb`)
 - **Transformations**: dbt with the `dbt-duckdb` adapter
 - **Ingestion**: `python -m ingestion.extract_sheets`
-- **Dashboards**: Evidence reading DuckDB directly
+- **Dashboards**: Evidence (`dashboards/`), whose source queries read the marts
+  and nothing else; the pages build to a static site
 
 Naming: everything this project names (tables, columns, flags) is English.
 Values copied from the workbooks stay as typed in the Portuguese source
@@ -175,6 +176,7 @@ on debits and `payment_method_key` on credits, which a test enforces.
 | `dim_payment_method` | one row per payment method | `payment_method_key`, `payment_method`, `method_type` (`'credit_card'` / `'other'`), `source_color` |
 | `fct_transactions` | one row per transaction | `transaction_id`; FKs to the dims for `transaction_date`, `budget_month`, category, owner, payment method; `purchase_id` for installments; `amount`, `effective_amount` (amount if effective, else 0), `signed_effective_amount` (+ credits, − debits); the flags and installment columns of staging |
 | `fct_installments` | one row per installment of every purchase | `installment_id`, `purchase_id`, `installment_number`, `budget_month`, `transaction_id` (NULL outside the workbooks), `amount`, `outstanding_amount`, `is_recorded`, `is_settled` (6.9) |
+| `fct_monthly_cashflow` | one row per closed budget month (6.10) | `budget_month`, `income`, `spending`, `fixed_spending`, `variable_spending`, `unclassified_spending`, `invested`, `savings` (`income − spending`) |
 | `fct_portfolio_snapshots` | one row per asset per reference date | `snapshot_id` (`hash(reference_date\|bank\|asset)`), `reference_date`, `bank`, `asset`, `asset_class` (`'Real estate fund'` / `'Fixed income'` / `'Multimarket fund'` / `'Crypto'` / `'Cash'` / `'Other'`), `gross_value`, `allocation_pct`, `maturity_date`, `mom`, `yoy` |
 
 ## 5. Source → model mapping
@@ -381,6 +383,23 @@ is no workbook before 2021 or after the newest year. So a purchase from late
   outstanding. `fct_transactions` still carries the status as typed.
 - **What is still owed**: `sum(outstanding_amount)`.
 
+### 6.10 Monthly cash flow
+
+`fct_monthly_cashflow` holds the dashboard's metrics, so every page adds
+them up the same way:
+
+- **Closed months only**: months before the as-of month (6.9). The as-of
+  month is still being paid, so its income and bills are only partly in.
+  Both models take the as-of month from the same macro, `as_of_month()`.
+- **Income**: `effective_amount` of credits. **Spending**: `effective_amount`
+  of debits, so investment contributions (not effective) are left out and
+  card adjustments (negative) lower it.
+- **Fixed / variable / unclassified**: spending split by the category's
+  macro-category; unclassified covers `'Unknown'` and blanks. The three add
+  up to spending (tested).
+- **Invested**: settled investment contributions. **Savings**: income −
+  spending, i.e. what was invested plus what stayed in the account.
+
 ## 7. Decisions
 
 1. **2021 credits have no owner color** → default to `'Person A'`
@@ -394,6 +413,7 @@ is no workbook before 2021 or after the newest year. So a purchase from late
 9. **Asset renamed by a typed note** → mapped back through the seed `asset_aliases`
 10. **Installments outside the workbooks** → rebuilt from the purchase plan in `fct_installments`
 11. **Past installments** → always paid in `fct_installments`, whatever the sheet says
+12. **Dashboard metrics** → defined in `fct_monthly_cashflow`, over closed months only; Evidence only selects and filters
 
 ## 8. Bugs found with the synthetic data (fixed)
 

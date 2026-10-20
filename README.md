@@ -6,7 +6,7 @@
 
 > An end-to-end analytics engineering project that turns six years of household finance spreadsheets into a tested star schema and a self-serve dashboard.
 
-🚧 **Work in progress.** Ingestion, the synthetic dataset and the dbt models are done. The dashboard is being built; see [Roadmap](#roadmap).
+🚧 **Work in progress.** Ingestion, the synthetic dataset, the dbt models and the dashboard are done. Publishing the dashboard and the dbt docs is next; see [Roadmap](#roadmap).
 
 ## Why this project
 
@@ -47,6 +47,7 @@ Star schema built by dbt in three layers: staging cleans and types the raw table
 | `fct_transactions` | Fact | One row per transaction | Credits and debits, with installment and effective-amount flags |
 | `fct_installments` | Fact | One row per installment of every purchase | Full installment plans, including installments outside the workbooks' years; answers how much is still owed |
 | `fct_portfolio_snapshots` | Fact | One row per asset per reference date | Investment portfolio history |
+| `fct_monthly_cashflow` | Fact | One row per closed budget month | Income, spending (fixed / variable), investments and savings; the dashboard's metrics, defined once |
 | `dim_date` | Dimension | One row per day | Generated calendar |
 | `dim_category` | Dimension | One row per category | Category, macro-category (fixed / variable), type |
 | `dim_owner` | Dimension | One row per owner | Derived from cell colors |
@@ -60,10 +61,25 @@ Star schema built by dbt in three layers: staging cleans and types the raw table
 - dbt data tests on every staging key and accepted-value set, plus source freshness on the raw tables
 - dbt unit tests that pin the modeling rules (installment parsing, per-workbook theme colors, card precedence, macro-category fallback, snapshot dedup, asset aliases, installments outside the workbooks) on hand-made rows
 - Relationship tests from every fact key to its dimension
-- Reconciliation tests: every raw transaction reaches the fact with its amount, each portfolio snapshot total matches its newest source file, and each installment plan adds up to its purchase
+- Reconciliation tests: every raw transaction reaches the fact with its amount, each portfolio snapshot total matches its newest source file, each installment plan adds up to its purchase, and the monthly cash flow adds up to the transactions it summarizes
 - Range and row-count checks with `dbt_expectations`, plus a custom generic test (`is_first_day_of_month`) on every `budget_month`
 - Every model and source column documented, shared definitions written once as doc blocks
-- `dbt build` on every pull request, on a warehouse rebuilt from the synthetic workbooks
+- `dbt build` on every pull request, on a warehouse rebuilt from the synthetic workbooks, followed by a strict dashboard build that fails on any broken query or component
+
+## Dashboard
+
+![Dashboard overview: income, spending and savings rate for the last 12 closed months, and income against spending by month](docs/img/dashboard-overview.png)
+
+Four Evidence pages (`dashboards/`) over the marts, built as a static site:
+
+| Page | Answers |
+| --- | --- |
+| Overview | Income, spending and savings rate over the last 12 closed months against the 12 before; income against spending by month; savings rate by year |
+| Spending | How fixed and variable costs evolved; spending by category and by card for a chosen year |
+| Installments | How much is still owed and when each month's installments fall due, including installments past the newest workbook; open purchases |
+| Portfolio | Portfolio value over time, its mix by asset class and the holdings in the latest snapshot |
+
+The metrics live in dbt (`fct_monthly_cashflow`), where they are tested and documented; Evidence only reads the marts and filters them. A month counts once it is closed, so the month still being paid doesn't drag the totals down.
 
 ## Bugs the synthetic data caught
 
@@ -81,8 +97,8 @@ Running the ingestion end to end on the synthetic workbooks measured one suspect
 | Ingestion | Python + openpyxl | Reads cell fill colors, which carry business meaning (owner, card) |
 | Warehouse | DuckDB | Zero-infra, file-based, runs the same locally and in CI |
 | Transformation | dbt (`dbt-duckdb`) | Tested, documented, version-controlled SQL |
-| BI | Evidence | Dashboards as code, versioned next to the models |
-| CI | GitHub Actions | Lint, tests and `dbt build` on every pull request |
+| BI | Evidence | Dashboards as code (SQL + Markdown), versioned next to the models, built to a static site |
+| CI | GitHub Actions | Lint, tests, `dbt build` and the dashboard build on every pull request |
 
 ## How to run
 
@@ -93,14 +109,15 @@ python -m venv .venv && source .venv/bin/activate
 make setup
 ```
 
-Generate the synthetic workbooks, load them into DuckDB and build the dbt project:
+Generate the synthetic workbooks, load them into DuckDB, build the dbt project and the dashboard:
 
 ```bash
-make data   # synthetic XLSX → data/synthetic/ → raw.* in data/warehouse.duckdb
-make build  # dbt deps + dbt build (seeds, models, tests) + source freshness
+make data       # synthetic XLSX → data/synthetic/ → raw.* in data/warehouse.duckdb
+make build      # dbt deps + dbt build (seeds, models, tests) + source freshness
+make dashboard  # npm ci + Evidence sources + static site in dashboards/build/
 ```
 
-Or both at once with `make all`.
+Or all three with `make all`. The dashboard needs Node.js 18 or newer; `make dashboard-dev` serves it with live reload instead.
 
 No credentials or real data needed. The ingestion is idempotent: re-running on the same files reloads by `source_file` without duplicating rows. Unrecognized cell colors are logged with counts instead of failing the run.
 
@@ -109,6 +126,8 @@ No credentials or real data needed. The ingestion is idempotent: re-running on t
 - **Decision:** English names for everything the project defines, source values left in Portuguese. **Why:** the code and models read for an international audience, while the raw layer stays a faithful copy of the workbooks (`'Sim'`, `'Mercado'`, `'Fixo'`). **Trade-off:** staging has to map the Portuguese values that drive logic, such as the paid flag and the special categories.
 - **Decision:** keep the raw layer literal (installment suffixes and raw color codes untouched). **Why:** parsing rules can change and be replayed in dbt without re-reading the workbooks. **Trade-off:** the raw tables are not directly queryable for analysis.
 - **Decision:** resolve both `rgb` and `theme` color references. **Why:** Google Sheets exports the same visible color either as a hex value or as a theme index, depending on how it was applied. The ingestion loads each workbook's theme palette into `raw.workbook_themes`, so dbt resolves a theme index against the file it came from. **Trade-off:** one more raw table, and theme tints are not applied (the owner colors in these workbooks have none).
+- **Decision:** define the dashboard's metrics in a dbt mart (`fct_monthly_cashflow`) and keep the Evidence queries to selects and filters. **Why:** income, spending and savings get one tested, documented definition, and any other tool reading the warehouse adds them up the same way. **Trade-off:** a new metric means a dbt change, not only a dashboard edit.
+- **Decision:** open-source Evidence (`@evidence-dev/evidence`) built to a static site. **Why:** it deploys anywhere static files go, with no account or server, and builds in CI on the same synthetic warehouse. **Trade-off:** Evidence's project template now points to its hosted product, Evidence Studio, which has a different syntax; moving there later would mean rewriting the pages.
 - **Decision:** detect the debit-side layout from the header row instead of fixed positions. **Why:** a column was added in 2022, so 2021 workbooks have a different layout. **Trade-off:** the header detection has to be tested against both layouts.
 
 ## Roadmap
@@ -121,8 +140,8 @@ No credentials or real data needed. The ingestion is idempotent: re-running on t
 - [x] dbt staging, with unit and data tests
 - [x] dbt intermediate and marts
 - [x] dbt tests and column docs
-- [ ] dbt docs published on GitHub Pages
-- [ ] Evidence dashboard, deployed on the synthetic data
+- [x] Evidence dashboard on the synthetic data, built in CI
+- [ ] Dashboard and dbt docs published on GitHub Pages
 
 ## Repository structure
 
@@ -131,6 +150,7 @@ No credentials or real data needed. The ingestion is idempotent: re-running on t
 ├── ingestion/           # Python extract & load
 ├── synthetic/           # synthetic workbook generator
 ├── dbt/                 # models, tests, macros, seeds
+├── dashboards/          # Evidence pages and source queries
 ├── tests/               # Python unit tests
 └── docs/                # data model design
 ```
