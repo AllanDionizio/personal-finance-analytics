@@ -1,0 +1,17 @@
+category,income_group,is_operating
+Salário,Salary,true
+PLR,Variable pay,true
+Décimo Terceiro,Variable pay,true
+Férias,Variable pay,true
+Comissão,Variable pay,true
+Vale,Benefits,true
+Auxílio,Benefits,true
+Empresa,Business,true
+Proventos,Dividends,true
+Freelance,Other,true
+Cashback,Other,true
+Diversos,Other,true
+Presentes,Other,true
+Seguro,Other,true
+Emprestimos,Other,true
+Investimentos,Asset sales,false

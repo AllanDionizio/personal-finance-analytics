@@ -46,6 +46,23 @@ models:
         description: "'Fixed', 'Variable', 'Not applicable', NULL for income, 'Unknown'."
       - name: is_legacy
         description: '{{ doc("is_legacy") }}'
+      - name: income_group
+        description: >
+          Source of an income category ('Salary', 'Variable pay', 'Benefits', 'Business',
+          'Dividends', 'Other', 'Asset sales'), from seed income_groups; 'Other' when the seed
+          doesn't list it. NULL for expense categories.
+        data_tests:
+          - not_null:
+              config:
+                where: "category_type = 'income'"
+      - name: is_operating
+        description: >
+          For income categories, false when the money comes from selling an asset rather than
+          earning it ('Asset sales'); such credits stay out of income. NULL for expenses.
+        data_tests:
+          - not_null:
+              config:
+                where: "category_type = 'income'"
 
   - name: dim_owner
     description: "Owners of credits, from the amount cell's color."
@@ -298,7 +315,19 @@ models:
                 interval: 1
                 datepart: month
       - name: income
-        description: Settled credits (effective_amount of credits).
+        description: >
+          Operating income: settled credits in operating categories (dim_category.is_operating).
+          Dividends are included.
+        data_tests:
+          - not_null
+      - name: non_operating_income
+        description: >
+          Settled credits that are not earned, such as money from selling an asset. Real cash in,
+          but outside income and the savings rate.
+        data_tests:
+          - not_null
+      - name: dividends
+        description: The part of income from real-estate fund dividends (passive income).
         data_tests:
           - not_null
       - name: spending
@@ -328,6 +357,136 @@ models:
             expression: "fixed_spending + variable_spending + unclassified_spending = spending"
           config:
             description: Every unit of spending lands in exactly one macro-category column.
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "dividends <= income"
+          config:
+            description: Dividends are part of operating income.
+
+  - name: fct_inflation_monthly
+    description: >
+      One row per month of Brazil's official consumer inflation (IPCA, seed ipca_monthly), with
+      the price index and the 12-month and year-to-date rates compounded from the monthly ones.
+    columns:
+      - name: month
+        description: First day of the month the inflation refers to.
+        data_tests:
+          - unique
+          - not_null
+          - is_first_day_of_month
+          - dbt_utils.sequential_values:
+              arguments:
+                interval: 1
+                datepart: month
+      - name: ipca_pct
+        description: Monthly change in percent, as published (0.82 means 0.82%).
+      - name: ipca_rate
+        description: ipca_pct as a fraction (0.0082).
+      - name: price_index
+        description: Price level, 100 at the month before the series starts.
+      - name: ipca_12m
+        description: Inflation compounded over the 12 months up to this one; NULL in the first 11.
+      - name: ipca_ytd
+        description: Inflation compounded from January up to this month.
+    data_tests:
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "abs(ipca_ytd - ipca_12m) < 1e-9"
+          config:
+            where: "month(month) = 12 and ipca_12m is not null"
+            description: In December the year to date and the last 12 months are the same months.
+
+  - name: fct_net_worth
+    description: >
+      One row per portfolio snapshot: value, external flows since the previous snapshot, the
+      return (modified Dietz, dividends included) and inflation over the same periods, chained
+      over 12 months and the year to date, and the liquid reserve against its target band.
+    columns:
+      - name: reference_date
+        description: '{{ doc("reference_date") }}'
+        data_tests:
+          - unique
+          - not_null
+      - name: total_value
+        description: Sum of gross_value of every holding in the snapshot.
+        data_tests:
+          - not_null
+      - name: liquid_reserve
+        description: >
+          Cash balance plus fixed income with no maturity date (daily liquidity): the money
+          available at once for an emergency.
+        data_tests:
+          - not_null
+      - name: contributions
+        description: >
+          Settled investment contributions dated after the previous snapshot, up to this one.
+          The only external flow the workbooks record. NULL for the first snapshot.
+      - name: dividends
+        description: >
+          Settled dividends paid in the same window, counted as return. NULL for the first
+          snapshot.
+      - name: period_gain
+        description: total_value - previous total_value - contributions + dividends.
+      - name: period_return
+        description: >
+          Modified Dietz return of the period: period_gain over the previous value plus half the
+          contributions. Understated when money left the portfolio without being recorded.
+        data_tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: -0.5
+                max_value: 0.5
+      - name: period_inflation
+        description: >
+          IPCA compounded over the months after the previous snapshot's month, up to this
+          snapshot's month; NULL while one of them isn't published.
+      - name: return_12m
+        description: >
+          period_return compounded over the last 12 periods; NULL without 12 periods whose
+          inflation is known.
+      - name: inflation_12m
+        description: period_inflation compounded over the same 12 periods.
+      - name: real_return_12m
+        description: >
+          (1 + return_12m) / (1 + inflation_12m) - 1. Above 0 means the portfolio beat
+          inflation.
+      - name: return_ytd
+        description: period_return compounded over the periods ending this year.
+      - name: inflation_ytd
+        description: period_inflation compounded over the same periods.
+      - name: real_return_ytd
+        description: (1 + return_ytd) / (1 + inflation_ytd) - 1.
+      - name: avg_monthly_spending
+        description: >
+          Average monthly spending over the 12 closed months up to the snapshot's month; NULL
+          with fewer.
+      - name: avg_monthly_fixed_spending
+        description: Average monthly fixed spending over the same 12 months.
+      - name: runway_months
+        description: >
+          total_value / avg_monthly_spending: how many months the portfolio would pay for all
+          spending.
+      - name: reserve_months
+        description: >
+          liquid_reserve / avg_monthly_fixed_spending: how many months the reserve would pay for
+          fixed costs.
+      - name: reserve_status
+        description: >
+          'Below target', 'Within target' or 'Above target' against the project vars
+          reserve_min_months and reserve_max_months (6 and 12 months of fixed spending).
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["Below target", "Within target", "Above target"]
+    data_tests:
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "liquid_reserve <= total_value"
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "contributions >= 0 and dividends >= 0"
+          config:
+            where: "contributions is not null"
 
   - name: fct_portfolio_snapshots
     description: One row per asset per reference date.

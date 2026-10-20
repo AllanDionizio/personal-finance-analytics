@@ -66,3 +66,57 @@ seeds:
       - dbt_utils.unique_combination_of_columns:
           arguments:
             combination_of_columns: ["bank", "raw_asset"]
+
+  - name: income_groups
+    description: >
+      Groups each income category into the source it comes from, and marks
+      which ones are operating income. Non-operating credits (money from
+      selling an asset) are real cash in, but not income, so they stay out of
+      income and the savings rate.
+    config:
+      column_types:
+        category: varchar
+        income_group: varchar
+        is_operating: boolean
+    columns:
+      - name: category
+        description: Income category as typed in the workbooks.
+        data_tests:
+          - unique
+          - not_null
+      - name: income_group
+        description: Source of the income, as shown on the dashboard.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["Salary", "Variable pay", "Benefits", "Business", "Dividends", "Other", "Asset sales"]
+      - name: is_operating
+        description: False for money that comes from selling an asset rather than earning it.
+        data_tests:
+          - not_null
+
+  - name: ipca_monthly
+    description: >
+      Brazil's official consumer inflation (IPCA), monthly, from the Central
+      Bank's SGS series 433:
+      https://api.bcb.gov.br/dados/serie/bcdata.sgs.433/dados?formato=json.
+      Public data, refreshed by hand when a new month is published.
+    config:
+      column_types:
+        month: date
+        ipca_pct: decimal(6,2)
+    columns:
+      - name: month
+        description: First day of the month the inflation refers to.
+        data_tests:
+          - unique
+          - not_null
+      - name: ipca_pct
+        description: Monthly change in percent (0.82 means 0.82%).
+        data_tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: -5
+                max_value: 5

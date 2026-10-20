@@ -1,5 +1,6 @@
 -- Every settled transaction of a closed month reaches the cash flow: per
--- side, the mart's totals match fct_transactions over the same months.
+-- side, the mart's totals match fct_transactions over the same months
+-- (credits split into operating and non-operating income).
 
 with
 
@@ -16,7 +17,7 @@ closed_transactions as (
 cashflow as (
 
     select
-        sum(income) as income,
+        sum(income) + sum(non_operating_income) as income,
         sum(spending) as spending
     from {{ ref('fct_monthly_cashflow') }}
 
