@@ -44,6 +44,8 @@ logs/
 # Evidence
 dashboards/.evidence/
 dashboards/build/
+# Assembled Pages site (make site)
+site/
 node_modules/
 
 # Claude Code (local settings only)
