@@ -109,7 +109,7 @@ limit 10
     x=category
     y=change
     series=direction
-    seriesColors={{'Up': ['#e34948', '#e66767'], 'Down': ['#2a78d6', '#3987e5']}}
+    seriesColors={{'Up': ['#e34948', '#e66767'], 'Down': ['#5650d6', '#8a85f0']}}
     swapXY=true
     leftPadding=24
     sort=false
@@ -165,6 +165,7 @@ order by month, measure
     y=index
     series=measure
     seriesOrder={['Income', 'Spending', 'Inflation (IPCA)']}
+    seriesColors={{'Income': ['#5650d6', '#8a85f0'], 'Spending': ['#e07a2e', '#d9752a'], 'Inflation (IPCA)': ['#7b8491', '#5f6873']}}
     yFmt=num0
     xFmt="mmm yyyy"
     title="Rolling 12 months, indexed to 100 at the first full window"
@@ -287,7 +288,7 @@ order by amount desc
 <DataTable data={by_category} rows=all emptySet=pass>
     <Column id=category />
     <Column id=macro_category title="Type" />
-    <Column id=amount fmt=brl0 contentType=bar />
+    <Column id=amount fmt=brl0 contentType=bar barColor={['#dcdafb', '#353094']} />
     <Column id=transactions />
 </DataTable>
 

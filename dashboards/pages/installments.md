@@ -79,7 +79,7 @@ order by owed desc
     <Column id=paid_installments title="Paid" />
     <Column id=installment_count title="Of" />
     <Column id=installment_amount fmt=brl title="Per installment" />
-    <Column id=owed fmt=brl title="Still owed" contentType=bar />
+    <Column id=owed fmt=brl title="Still owed" contentType=bar barColor={['#dcdafb', '#353094']} />
     <Column id=last_month title="Last installment" />
 </DataTable>
 

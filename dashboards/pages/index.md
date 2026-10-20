@@ -155,7 +155,7 @@ order by month
     x=month
     y=result
     series=outcome
-    seriesColors={{'Surplus': ['#2a78d6', '#3987e5'], 'Deficit': ['#e34948', '#e66767']}}
+    seriesColors={{'Surplus': ['#5650d6', '#8a85f0'], 'Deficit': ['#e34948', '#e66767']}}
     yFmt=brl0k
     xFmt="mmm yyyy"
 />
