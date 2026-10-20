@@ -87,7 +87,7 @@ Five Evidence pages (`dashboards/`) over the marts, built as a static site. They
 
 The metrics live in dbt (`fct_monthly_cashflow`, `fct_net_worth`, `fct_inflation_monthly`), where they are tested and documented; Evidence only reads the marts and filters them. A month counts once it is closed, so the month still being paid doesn't drag the totals down.
 
-The look is the project's own, not Evidence's default: KPIs, charts and tables sit on cards, the type is Geist, and the site opens in dark mode with a light-mode switch. The chart colors come from a palette checked for color-vision deficiency, with separate steps for each mode, and every text color passes WCAG AA contrast on both surfaces. The theme is configuration and one stylesheet (`evidence.config.yaml`, `dashboards/components/brand.css`), so the pages keep Evidence's standard components.
+The look is the project's own, not Evidence's default: KPIs, charts and tables sit on cards, the type is Geist, and the site opens in dark mode with a light-mode switch. The household's own series lead in indigo and every benchmark (inflation, invested capital) is drawn in gray, so each comparison reads as "our line against the bar to beat". The palette and the gray were checked for color-vision deficiency, with separate steps for each mode, and every text color passes WCAG AA contrast on both surfaces. The theme is configuration and one stylesheet (`evidence.config.yaml`, `dashboards/components/brand.css`), so the pages keep Evidence's standard components.
 
 ## Bugs the synthetic data caught
 
