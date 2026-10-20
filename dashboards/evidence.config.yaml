@@ -1,28 +1,53 @@
+# Dark first, with the switcher for anyone who prefers light. Surfaces follow
+# the "Product" direction: cards (base-100, also the chart background) on a
+# separate ground color, set in components/brand.css.
 appearance:
-  default: system
+  default: dark
   switcher: true
 
 theme:
-  # Categorical order from a palette checked for color-vision deficiency;
-  # the dark steps are tuned for the dark surface, not an automatic flip.
+  # Indigo first, checked for color-vision deficiency as an ordered set of
+  # six (no chart has more series); the dark steps are tuned for the dark
+  # card, not an automatic flip. Benchmarks (IPCA, invested capital) are not
+  # in the palette: the pages paint them gray, #7b8491 light / #5f6873 dark.
   colorPalettes:
     default:
-      light: ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948"]
-      dark: ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#008300", "#9085e9", "#e66767"]
+      light: ["#5650d6", "#e07a2e", "#0f9a8c", "#b88f00", "#3d8fd6", "#d64f7c"]
+      dark: ["#8a85f0", "#d9752a", "#14a393", "#b48c10", "#3f8ade", "#d85c88"]
   colorScales:
     default:
-      light: ["#cde2fb", "#104281"]
-      dark: ["#184f95", "#cde2fb"]
+      light: ["#e3e2fc", "#2e2896"]
+      dark: ["#2e2896", "#d9d7fb"]
   colors:
+    # The first chart color, which passes 4.5:1 as link text on the cards
+    # and the ground in both modes
     primary:
-      light: "#2a78d6"
-      dark: "#3987e5"
+      light: "#5650d6"
+      dark: "#8a85f0"
+    base-100:
+      light: "#ffffff"
+      dark: "#11151b"
+    base-200:
+      light: "#f3f5f7"
+      dark: "#1a2029"
+    base-300:
+      light: "#e3e7ec"
+      dark: "#262d36"
+    base-heading:
+      light: "#111827"
+      dark: "#f3f4f6"
+    base-content:
+      light: "#1f2937"
+      dark: "#dfe3e8"
+    base-content-muted:
+      light: "#4b5563"
+      dark: "#9aa4af"
     positive:
-      light: "#0ca30c"
-      dark: "#0ca30c"
+      light: "#0a6b2e"
+      dark: "#3fb950"
     negative:
-      light: "#d03b3b"
-      dark: "#d03b3b"
+      light: "#b42318"
+      dark: "#f07178"
 
 plugins:
   components:

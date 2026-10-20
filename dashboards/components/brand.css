@@ -1,0 +1,157 @@
+/*
+	"Product" direction: cards on a ground color, Geist, pill deltas.
+	base-100 is the card color and also the chart background (Evidence paints
+	charts with it), so charts and tables become cards just by sitting on the
+	ground. Colors live in evidence.config.yaml; only the ground is set here.
+*/
+
+:root {
+	--pfa-ground: #f3f5f7;
+	--pfa-card-shadow: 0 1px 3px rgb(17 24 39 / 0.06);
+	--pfa-radius: 16px;
+}
+
+[data-theme='dark'] {
+	--pfa-ground: #0a0d11;
+	--pfa-card-shadow: none;
+}
+
+/* html body: Evidence also paints body with base-100, in a later stylesheet */
+html,
+html body {
+	background-color: var(--pfa-ground);
+	color-scheme: light;
+}
+
+[data-theme='dark'],
+[data-theme='dark'] body {
+	color-scheme: dark;
+}
+
+/* Header: the mark before the title */
+header a.font-bold {
+	@apply flex items-center gap-2.5 text-base font-semibold;
+}
+
+header a.font-bold::before {
+	content: '';
+	flex: none;
+	width: 28px;
+	height: 28px;
+	border-radius: 8px;
+	background: theme('colors.primary')
+		url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 18'%3E%3Cpolyline points='2,13 7,8 10,11 16,4' fill='none' stroke='white' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+		center / 16px no-repeat;
+}
+
+/* Sidebar and table of contents sit on the ground, active page as a pill */
+.sticky.bg-base-100 {
+	background-color: var(--pfa-ground);
+	box-shadow: none;
+}
+
+aside a.text-primary {
+	@apply bg-base-100 font-semibold rounded-lg -mx-3 px-3;
+	box-shadow: var(--pfa-card-shadow);
+}
+
+[data-theme='dark'] aside a.text-primary {
+	@apply bg-base-200;
+}
+
+/* Cards: charts, tables, KPIs and the wrappers used on the pages */
+#evidence-main-article .chart-container,
+#evidence-main-article .table-container,
+.kpi-grid > div,
+.hero,
+.chapters li {
+	@apply bg-base-100 border border-base-300/60;
+	border-radius: var(--pfa-radius);
+	box-shadow: var(--pfa-card-shadow);
+}
+
+[data-theme='light'] #evidence-main-article .chart-container,
+[data-theme='light'] #evidence-main-article .table-container,
+[data-theme='light'] .kpi-grid > div,
+[data-theme='light'] .hero,
+[data-theme='light'] .chapters li {
+	border-color: transparent;
+}
+
+#evidence-main-article .chart-container {
+	@apply px-4 pt-4 pb-1 my-4;
+}
+
+#evidence-main-article .table-container {
+	@apply p-3;
+}
+
+/* KPI row: a responsive grid of cards instead of inline blocks */
+.kpi-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+	gap: 16px;
+	margin: 1.25rem 0 1.75rem;
+}
+
+.kpi-grid > div {
+	@apply m-0 px-5 py-4 flex flex-col items-stretch text-left;
+	min-width: 0 !important;
+}
+
+.kpi-grid > div > p:first-child {
+	@apply text-sm text-base-content-muted leading-snug;
+}
+
+.kpi-grid > div > div {
+	@apply flex items-end justify-between gap-3 text-3xl font-semibold tracking-tight mt-2;
+	font-variant-numeric: tabular-nums;
+}
+
+/* Comparison as a pill, tinted by the status Delta already computed */
+.kpi-grid > div > p.text-xs {
+	@apply self-start mt-3 rounded-full px-2.5 py-0.5 font-medium bg-base-200;
+}
+
+.kpi-grid > div > p.text-xs:has(.text-positive) {
+	@apply bg-positive/10;
+}
+
+.kpi-grid > div > p.text-xs:has(.text-negative) {
+	@apply bg-negative/10;
+}
+
+/* Home: the opening paragraph and the chapter links */
+.hero {
+	@apply p-6 sm:p-7 my-4;
+}
+
+.hero p.markdown {
+	@apply text-lg leading-relaxed text-base-content;
+}
+
+.hero p.markdown:last-child {
+	margin-block-end: 0;
+}
+
+.chapters ul.markdown {
+	@apply grid gap-4 ps-0 list-none;
+	grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+}
+
+.chapters li.markdown {
+	@apply m-0 p-5 text-sm text-base-content-muted;
+}
+
+.chapters li.markdown + li.markdown {
+	@apply mt-0;
+}
+
+.chapters li.markdown strong {
+	@apply block text-base text-base-heading mb-1;
+}
+
+h1.markdown,
+h1.title {
+	@apply text-3xl tracking-tight;
+}

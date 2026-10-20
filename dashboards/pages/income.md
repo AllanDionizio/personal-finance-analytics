@@ -75,6 +75,8 @@ limit 1
 
 ## Last 12 closed months, through <Value data={income_kpis} column=through_month />
 
+<div class="kpi-grid">
+
 <BigValue
     data={income_kpis}
     value=income
@@ -108,6 +110,8 @@ limit 1
     title="Share of spending dividends pay for"
     fmt=pct1
 />
+
+</div>
 
 <!-- fmt() instead of <Value>: Value leaves a space before the punctuation that follows it -->
 Income {income_kpis[0]?.income_growth >= 0 ? 'grew' : 'fell'} {fmt(Math.abs(income_kpis[0]?.income_growth), 'pct1')} against {fmt(income_kpis[0]?.ipca_12m, 'pct1')} of inflation, so in real terms it {income_kpis[0]?.real_income_growth >= 0 ? 'grew' : 'shrank'} {fmt(Math.abs(income_kpis[0]?.real_income_growth), 'pct1')}. {top_source[0]?.income_group} alone is {fmt(top_source[0]?.share, 'pct0')} of it: the more income depends on one source, the more a single change (a job, a bonus) moves the whole picture.

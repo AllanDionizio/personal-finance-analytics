@@ -87,6 +87,8 @@ Five Evidence pages (`dashboards/`) over the marts, built as a static site. They
 
 The metrics live in dbt (`fct_monthly_cashflow`, `fct_net_worth`, `fct_inflation_monthly`), where they are tested and documented; Evidence only reads the marts and filters them. A month counts once it is closed, so the month still being paid doesn't drag the totals down.
 
+The look is the project's own, not Evidence's default: KPIs, charts and tables sit on cards, the type is Geist, and the site opens in dark mode with a light-mode switch. The household's own series lead in indigo and every benchmark (inflation, invested capital) is drawn in gray, so each comparison reads as "our line against the bar to beat". The palette and the gray were checked for color-vision deficiency, with separate steps for each mode, and every text color passes WCAG AA contrast on both surfaces. The theme is configuration and one stylesheet (`evidence.config.yaml`, `dashboards/components/brand.css`), so the pages keep Evidence's standard components.
+
 ## Bugs the synthetic data caught
 
 Running the ingestion end to end on the synthetic workbooks measured one suspected bug and exposed one nobody knew about:
@@ -137,6 +139,7 @@ No credentials or real data needed. The ingestion is idempotent: re-running on t
 - **Decision:** official inflation (IPCA) as a versioned seed from the Central Bank's public API, compounded over the same periods as the return. **Why:** the build stays reproducible and offline, and "did we beat inflation?" compares like with like. **Trade-off:** the seed is refreshed by hand when a new month is published.
 - **Decision:** define the dashboard's metrics in a dbt mart (`fct_monthly_cashflow`) and keep the Evidence queries to selects and filters. **Why:** income, spending and savings get one tested, documented definition, and any other tool reading the warehouse adds them up the same way. **Trade-off:** a new metric means a dbt change, not only a dashboard edit.
 - **Decision:** open-source Evidence (`@evidence-dev/evidence`) built to a static site. **Why:** it deploys anywhere static files go, with no account or server, and builds in CI on the same synthetic warehouse. **Trade-off:** Evidence's project template now points to its hosted product, Evidence Studio, which has a different syntax; moving there later would mean rewriting the pages.
+- **Decision:** brand the dashboard through Evidence's theme tokens, a project Tailwind preset and one global stylesheet, instead of custom components. **Why:** the pages keep using the standard BigValue, chart and table components, and the cards come from the theme (charts are painted with the card color). **Trade-off:** a few selectors target Evidence's markup (the KPI and sidebar classes), so an Evidence upgrade can need a CSS touch-up; the strict build and the screenshots catch it.
 - **Decision:** detect the debit-side layout from the header row instead of fixed positions. **Why:** a column was added in 2022, so 2021 workbooks have a different layout. **Trade-off:** the header detection has to be tested against both layouts.
 
 ## Roadmap

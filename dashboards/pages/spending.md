@@ -40,6 +40,8 @@ left join warehouse.inflation as ipca on ipca.month = w.last_month
 
 ## Last 12 closed months, through <Value data={spending_kpis} column=through_month />
 
+<div class="kpi-grid">
+
 <BigValue
     data={spending_kpis}
     value=spending
@@ -62,6 +64,8 @@ left join warehouse.inflation as ipca on ipca.month = w.last_month
     title="Fixed share of spending"
     fmt=pct1
 />
+
+</div>
 
 <!-- fmt() instead of <Value>: Value leaves a space before the punctuation that follows it -->
 Spending {spending_kpis[0]?.spending_growth >= 0 ? 'grew' : 'fell'} {fmt(Math.abs(spending_kpis[0]?.spending_growth), 'pct1')} against {fmt(spending_kpis[0]?.ipca_12m, 'pct1')} of inflation: in real terms, the household spent {fmt(Math.abs(spending_kpis[0]?.real_spending_growth), 'pct1')} {spending_kpis[0]?.real_spending_growth >= 0 ? 'more' : 'less'} than a year before.
@@ -105,7 +109,7 @@ limit 10
     x=category
     y=change
     series=direction
-    seriesColors={{'Up': '#e34948', 'Down': '#2a78d6'}}
+    seriesColors={{'Up': ['#e34948', '#e66767'], 'Down': ['#5650d6', '#8a85f0']}}
     swapXY=true
     leftPadding=24
     sort=false
@@ -161,6 +165,7 @@ order by month, measure
     y=index
     series=measure
     seriesOrder={['Income', 'Spending', 'Inflation (IPCA)']}
+    seriesColors={{'Income': ['#5650d6', '#8a85f0'], 'Spending': ['#e07a2e', '#d9752a'], 'Inflation (IPCA)': ['#7b8491', '#5f6873']}}
     yFmt=num0
     xFmt="mmm yyyy"
     title="Rolling 12 months, indexed to 100 at the first full window"
@@ -283,7 +288,7 @@ order by amount desc
 <DataTable data={by_category} rows=all emptySet=pass>
     <Column id=category />
     <Column id=macro_category title="Type" />
-    <Column id=amount fmt=brl0 contentType=bar />
+    <Column id=amount fmt=brl0 contentType=bar barColor={['#dcdafb', '#353094']} />
     <Column id=transactions />
 </DataTable>
 

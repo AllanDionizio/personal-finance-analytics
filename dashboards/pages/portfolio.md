@@ -31,6 +31,8 @@ order by reference_date desc
 
 ## Latest snapshot, <Value data={worth} column=reference_label />
 
+<div class="kpi-grid">
+
 <BigValue
     data={worth}
     value=total_value
@@ -59,6 +61,8 @@ order by reference_date desc
     title="Liquid reserve, months of fixed costs"
     fmt=num1
 />
+
+</div>
 
 ## Contributions or returns?
 
@@ -95,6 +99,7 @@ from warehouse.net_worth
     y=amount
     series=measure
     seriesOrder={['Portfolio value', 'First value + contributions']}
+    seriesColors={{'Portfolio value': ['#5650d6', '#8a85f0'], 'First value + contributions': ['#7b8491', '#5f6873']}}
     yFmt=brl0k
     xFmt="mmm yyyy"
 />
@@ -137,6 +142,7 @@ order by year, measure
     y=rate
     series=measure
     seriesOrder={['Portfolio return', 'Inflation (IPCA)']}
+    seriesColors={{'Portfolio return': ['#5650d6', '#8a85f0'], 'Inflation (IPCA)': ['#7b8491', '#5f6873']}}
     type=grouped
     sort=false
     yFmt=pct0
@@ -166,6 +172,7 @@ order by snapshot_at, measure
     y=rate
     series=measure
     seriesOrder={['Portfolio return', 'Inflation (IPCA)']}
+    seriesColors={{'Portfolio return': ['#5650d6', '#8a85f0'], 'Inflation (IPCA)': ['#7b8491', '#5f6873']}}
     yFmt=pct0
     xFmt="mmm yyyy"
     title="Rolling 12 months"
@@ -274,12 +281,16 @@ select
     (select max(share) from ${by_bank}) as top_bank_share
 ```
 
+<div class="kpi-grid">
+
 <BigValue data={top_assets} value=top_bank_share title="Share of the largest institution" fmt=pct0 />
 <BigValue data={top_assets} value=top5_share title="Share of the 5 largest holdings" fmt=pct0 />
 
+</div>
+
 <DataTable data={by_bank}>
     <Column id=bank title="Institution" />
-    <Column id=value fmt=brl0 contentType=bar />
+    <Column id=value fmt=brl0 contentType=bar barColor={['#dcdafb', '#353094']} />
     <Column id=share fmt=pct1 />
     <Column id=holdings />
 </DataTable>
@@ -325,7 +336,7 @@ order by gross_value desc
     <Column id=bank title="Bank" />
     <Column id=asset title="Asset" />
     <Column id=asset_class title="Class" />
-    <Column id=gross_value fmt=brl title="Value" contentType=bar />
+    <Column id=gross_value fmt=brl title="Value" contentType=bar barColor={['#dcdafb', '#353094']} />
     <Column id=share fmt=pct1 title="Share" />
     <Column id=maturity title="Maturity" />
 </DataTable>
