@@ -28,12 +28,15 @@ jobs:
       - name: Python tests
         run: pytest -q
 
-  dbt-build:
+  # One job from the workbooks to the dashboard: each step needs the
+  # warehouse file the previous ones built.
+  pipeline:
     runs-on: ubuntu-24.04
     needs: lint-and-test
     env:
       DBT_PROFILES_DIR: ${{ github.workspace }}/dbt
       DUCKDB_PATH: ${{ github.workspace }}/data/warehouse.duckdb
+      SEND_ANONYMOUS_USAGE_STATS: "no"
     steps:
       - uses: actions/checkout@v4
 
@@ -67,3 +70,21 @@ jobs:
 
       - name: Lint SQL
         run: sqlfluff lint dbt/models
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: dashboards/package-lock.json
+
+      - name: Install Evidence
+        working-directory: dashboards
+        run: npm ci
+
+      - name: Extract the marts for Evidence
+        working-directory: dashboards
+        run: npm run sources
+
+      - name: Build the dashboard (strict, fails on query or component errors)
+        working-directory: dashboards
+        run: npm run build:strict
