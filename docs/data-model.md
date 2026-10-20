@@ -171,12 +171,14 @@ on debits and `payment_method_key` on credits, which a test enforces.
 | Model | Grain | Key columns |
 |---|---|---|
 | `dim_date` | one row per day, 2020-01-01 to 2030-12-31 | `date_day`, year, month, quarter, month name, weekday, is_weekend, first/last day of month |
-| `dim_category` | one row per category and type | `category_key`, `category`, `macro_category`, `category_type` |
+| `dim_category` | one row per category and type | `category_key`, `category`, `macro_category`, `category_type`; for income, `income_group` and `is_operating` (seed `income_groups`) |
 | `dim_owner` | one row per owner | `owner_key`, `owner`, `source_color` (`'#4BACC6'`) |
 | `dim_payment_method` | one row per payment method | `payment_method_key`, `payment_method`, `method_type` (`'credit_card'` / `'other'`), `source_color` |
 | `fct_transactions` | one row per transaction | `transaction_id`; FKs to the dims for `transaction_date`, `budget_month`, category, owner, payment method; `purchase_id` for installments; `amount`, `effective_amount` (amount if effective, else 0), `signed_effective_amount` (+ credits, − debits); the flags and installment columns of staging |
 | `fct_installments` | one row per installment of every purchase | `installment_id`, `purchase_id`, `installment_number`, `budget_month`, `transaction_id` (NULL outside the workbooks), `amount`, `outstanding_amount`, `is_recorded`, `is_settled` (6.9) |
-| `fct_monthly_cashflow` | one row per closed budget month (6.10) | `budget_month`, `income`, `spending`, `fixed_spending`, `variable_spending`, `unclassified_spending`, `invested`, `savings` (`income − spending`) |
+| `fct_monthly_cashflow` | one row per closed budget month (6.10) | `budget_month`, `income` (operating), `non_operating_income`, `dividends`, `spending`, `fixed_spending`, `variable_spending`, `unclassified_spending`, `invested`, `savings` (`income − spending`) |
+| `fct_net_worth` | one row per portfolio snapshot (6.11) | `reference_date`, `total_value`, `liquid_reserve`, `contributions`, `dividends`, `period_return`, `period_inflation`, `return_12m`, `inflation_12m`, `real_return_12m`, the same year to date, `runway_months`, `reserve_months`, `reserve_status` |
+| `fct_inflation_monthly` | one row per month (6.12) | `month`, `ipca_pct`, `ipca_rate`, `price_index`, `ipca_12m`, `ipca_ytd` |
 | `fct_portfolio_snapshots` | one row per asset per reference date | `snapshot_id` (`hash(reference_date\|bank\|asset)`), `reference_date`, `bank`, `asset`, `asset_class` (`'Real estate fund'` / `'Fixed income'` / `'Multimarket fund'` / `'Crypto'` / `'Cash'` / `'Other'`), `gross_value`, `allocation_pct`, `maturity_date`, `mom`, `yoy` |
 
 ## 5. Source → model mapping
@@ -391,14 +393,48 @@ them up the same way:
 - **Closed months only**: months before the as-of month (6.9). The as-of
   month is still being paid, so its income and bills are only partly in.
   Both models take the as-of month from the same macro, `as_of_month()`.
-- **Income**: `effective_amount` of credits. **Spending**: `effective_amount`
-  of debits, so investment contributions (not effective) are left out and
-  card adjustments (negative) lower it.
+- **Income**: `effective_amount` of credits in operating categories. A credit
+  in `'Investimentos'` is money from selling an asset: real cash in, but it
+  doesn't repeat, so it goes to `non_operating_income` and stays out of the
+  savings rate (seed `income_groups`, `is_operating = false`). Dividends are
+  operating income and also get their own column. **Spending**:
+  `effective_amount` of debits, so investment contributions (not effective)
+  are left out and card adjustments (negative) lower it.
 - **Fixed / variable / unclassified**: spending split by the category's
   macro-category; unclassified covers `'Unknown'` and blanks. The three add
   up to spending (tested).
 - **Invested**: settled investment contributions. **Savings**: income −
   spending, i.e. what was invested plus what stayed in the account.
+
+### 6.11 Portfolio return and liquid reserve
+
+`fct_net_worth` has one row per snapshot:
+
+- **External flows**: the settled investment contributions dated after the
+  previous snapshot, up to this one (a row without a date counts at
+  mid-month). The workbooks record contributions only: a maturing asset is
+  reinvested inside the portfolio and books nothing, and a withdrawal to
+  spend isn't recorded, which understates that period's return.
+- **Return of a period** (modified Dietz): `(value − previous value −
+  contributions + dividends) / (previous value + contributions / 2)`.
+  Dividends are paid into the account, so they count as return.
+- **Against inflation**: IPCA is compounded over the months of each period
+  (after the previous snapshot's month, up to this one's), then returns and
+  inflation are chained over the last 12 periods and over the year, and
+  `real = (1 + return) / (1 + inflation) − 1`. NULL while a month isn't
+  published or there are fewer than 12 periods.
+- **Liquid reserve**: the cash balance plus fixed income with no maturity
+  date (daily liquidity), in months of the average fixed spending of the 12
+  closed months up to the snapshot's month. The target band is 6 to 12
+  months (vars `reserve_min_months`, `reserve_max_months`).
+- **Runway**: the whole portfolio in months of average spending.
+
+### 6.12 Inflation
+
+Seed `ipca_monthly` holds the official IPCA, monthly, from the Central
+Bank's public API (SGS series 433), refreshed by hand.
+`fct_inflation_monthly` adds the price index (100 before the first month)
+and the 12-month and year-to-date rates, compounded from the monthly ones.
 
 ## 7. Decisions
 
@@ -414,6 +450,9 @@ them up the same way:
 10. **Installments outside the workbooks** → rebuilt from the purchase plan in `fct_installments`
 11. **Past installments** → always paid in `fct_installments`, whatever the sheet says
 12. **Dashboard metrics** → defined in `fct_monthly_cashflow`, over closed months only; Evidence only selects and filters
+13. **Money from selling an asset** → non-operating income, outside income and the savings rate
+14. **Portfolio return** → modified Dietz, recorded contributions as the only external flow, dividends as return; compared with IPCA over the same periods
+15. **Liquid reserve** → cash plus fixed income with no maturity; target 6 to 12 months of fixed spending
 
 ## 8. Bugs found with the synthetic data (fixed)
 

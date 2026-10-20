@@ -9,6 +9,8 @@ select
     c.category,
     c.category_type,
     c.macro_category,
+    c.income_group,
+    c.is_operating,
     o.owner,
     p.payment_method,
     f.amount,

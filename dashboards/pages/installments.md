@@ -1,5 +1,6 @@
 ---
 title: Installments
+sidebar_position: 4
 ---
 
 The workbooks only show the installments that fall inside their own years, so a purchase made late in the newest year has installments that appear nowhere. dbt rebuilds each purchase's full plan from the installments it does find, so this page can answer how much is still owed and until when.
@@ -10,11 +11,17 @@ An installment counts as paid when its month comes before the newest month with 
 select
     sum(outstanding_amount) as owed,
     count(distinct purchase_id) filter (where outstanding_amount > 0) as open_purchases,
-    strftime(max(budget_month) filter (where outstanding_amount > 0), '%b %Y') as paid_off_in
+    strftime(max(budget_month) filter (where outstanding_amount > 0), '%b %Y') as paid_off_in,
+    -- against the average monthly income of the last 12 closed months
+    sum(outstanding_amount) / (
+        select sum(income) / 12
+        from (select income from warehouse.monthly_cashflow order by budget_month desc limit 12)
+    ) as months_of_income
 from warehouse.installments
 ```
 
 <BigValue data={summary} value=owed title="Still owed" fmt=brl />
+<BigValue data={summary} value=months_of_income title="In months of income" fmt=num1 />
 <BigValue data={summary} value=open_purchases title="Open purchases" />
 <BigValue data={summary} value=paid_off_in title="Last installment" />
 
