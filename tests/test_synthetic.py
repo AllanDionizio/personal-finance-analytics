@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import itertools
 import re
 from datetime import date
 from pathlib import Path
@@ -13,10 +14,12 @@ from ingestion.extract_sheets import detect_month_layout
 from ingestion.snapshot_blocks import find_snapshot_blocks
 from synthetic import catalog
 from synthetic.generate import (
+    ASSET_SALE,
     DEFAULT_AS_OF,
     FILE_TEMPLATE,
     FIRST_YEAR,
     LAST_YEAR,
+    TEXT_SNAPSHOT_DATE,
     Generator,
 )
 
@@ -121,3 +124,40 @@ def test_portfolio_sheet_is_cumulative(synthetic_dir: Path) -> None:
 
 def test_no_portfolio_sheet_before_2022(synthetic_dir: Path) -> None:
     assert "Situação Atual" not in _workbook(synthetic_dir, 2021).sheetnames
+
+
+def _table_snapshots(generator: Generator) -> list:
+    """Snapshots loaded as tables (the first one was free text)."""
+    return [s for s in generator.snapshots if s.when != TEXT_SNAPSHOT_DATE]
+
+
+def test_each_contribution_falls_between_two_snapshots(generator: Generator) -> None:
+    """The budget books one contribution per portfolio period, inside it."""
+    snapshots = _table_snapshots(generator)
+    for previous, current in itertools.pairwise(snapshots):
+        month = generator.ledger[(current.when.year, current.when.month)]
+        contributions = [e for e in month.debits if e.category == "Investimento"]
+        assert len(contributions) == 1, current.when
+        assert previous.when < contributions[0].when <= current.when
+
+
+def test_maturing_positions_stay_in_the_portfolio(generator: Generator) -> None:
+    """A position that ends is reinvested, so the total never falls off a cliff.
+
+    Before reinvestment, a matured position vanished with no money booked
+    anywhere, and the implied return of that period was a large loss.
+    """
+    totals = [sum(h.value for h in s.holdings) for s in _table_snapshots(generator)]
+    for previous, current in itertools.pairwise(totals):
+        assert current >= 0.95 * previous
+
+
+def test_asset_sale_is_typed_on_the_income_side(generator: Generator) -> None:
+    sale = [
+        e
+        for book in generator.ledger.values()
+        for e in book.credits
+        if e.category == "Investimentos"
+    ]
+    assert len(sale) == ASSET_SALE[3]
+    assert all(INSTALLMENT_RE.search(e.description) for e in sale)

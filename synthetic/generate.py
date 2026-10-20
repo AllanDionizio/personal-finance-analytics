@@ -66,10 +66,15 @@ Month = tuple[int, int]
 # Portfolio sheet: the first snapshot was written as free text, and columns
 # were added to the table twice.
 TEXT_SNAPSHOT_DATE = date(2022, 8, 25)
+FIRST_TABLE_SNAPSHOT_MONTH: Month = (2022, 9)
 ALLOCATION_COLUMNS_SINCE = date(2023, 6, 1)
 PROJECTION_COLUMNS_SINCE = date(2025, 1, 1)
 # Long-term fixed income tax, charged on the gain only.
 INCOME_TAX_RATE = 0.15
+# A one-off sale received in installments and typed as a credit in
+# 'Investimentos': money from selling an asset, not income.
+# (description, first year, first month, installments, amount each)
+ASSET_SALE = ("Venda de veículo", 2023, 3, 6, 4500.0)
 
 
 # --------------------------------------------------------------------------
@@ -196,8 +201,10 @@ class Generator:
         for year, month in months_between((FIRST_YEAR, 1), self.as_of_month):
             self._income(year, month)
             self._bills(year, month)
-        self._finalize()
+        self._asset_sale()
+        # Before _finalize: the portfolio's contributions become ledger rows.
         self._snapshots()
+        self._finalize()
         return self
 
     # ---- helpers ---------------------------------------------------------
@@ -359,16 +366,19 @@ class Generator:
                 )
             )
 
-        income = sum(e.amount for e in book.credits)
-        book.debits.append(
-            Entry(
-                "Aporte corretora",
-                "Investimento",
-                round(income * self.rng.uniform(0.12, 0.22), -1),
-                self._day(year, month, 10, 20),
-                macro="n/a",
+        # From the first portfolio snapshot on, contributions come from the
+        # portfolio itself (see _snapshots), so the two always agree.
+        if (year, month) < FIRST_TABLE_SNAPSHOT_MONTH:
+            income = sum(e.amount for e in book.credits)
+            book.debits.append(
+                Entry(
+                    "Aporte corretora",
+                    "Investimento",
+                    round(income * self.rng.uniform(0.12, 0.22), -1),
+                    self._day(year, month, 10, 20),
+                    macro="n/a",
+                )
             )
-        )
 
     # ---- credits ---------------------------------------------------------
 
@@ -431,20 +441,43 @@ class Generator:
         if year >= 2022 and self.rng.random() < 0.15:
             person_a("Cashback cartão", "Cashback", self.rng.uniform(5, 60), self._day(year, month))
 
-        if (year, month) >= (2022, 9):
-            months_invested = len(months_between((2022, 9), (year, month)))
-            tickers = c.FUND_TICKERS[: min(len(c.FUND_TICKERS), 2 + months_invested // 3)]
-            dividends = [
+    def _dividends(self, when: date, fund_value: float) -> None:
+        """Real-estate fund dividends paid since the previous snapshot.
+
+        About 0.8% of the position a month, split over the funds held (more
+        tickers as the position grows), paid into the account as credits.
+        """
+        months_invested = len(months_between(FIRST_TABLE_SNAPSHOT_MONTH, (when.year, when.month)))
+        tickers = c.FUND_TICKERS[: min(len(c.FUND_TICKERS), 2 + months_invested // 3)]
+        total = fund_value * self.rng.uniform(0.007, 0.009)
+        weights = [self.rng.uniform(0.5, 1.5) for _ in tickers]
+        dividends = [
+            Entry(
+                ticker,
+                "Proventos",
+                round(total * w / sum(weights), 2),
+                self._day(when.year, when.month, 8, when.day - 1),
+                ("rgb", c.NEUTRAL_RGB),
+            )
+            for ticker, w in zip(tickers, weights, strict=True)
+        ]
+        self.ledger[(when.year, when.month)].credits.extend(
+            sorted(dividends, key=lambda e: e.when or date.max)
+        )
+
+    def _asset_sale(self) -> None:
+        description, year, month, count, amount = ASSET_SALE
+        for k in range(1, count + 1):
+            y, m = add_months(year, month, k - 1)
+            self.ledger[(y, m)].credits.append(
                 Entry(
-                    ticker,
-                    "Proventos",
-                    round(self.rng.uniform(3, 45) * (1 + months_invested / 24), 2),
-                    self._day(year, month, 8, 20),
-                    ("rgb", c.NEUTRAL_RGB),
+                    f"{description} ({k}/{count})",
+                    "Investimentos",
+                    amount,
+                    self._day(y, m, 3, 8),
+                    self._person_a(y),
                 )
-                for ticker in tickers
-            ]
-            book.credits.extend(sorted(dividends, key=lambda e: e.when or date.max))
+            )
 
     # ---- status and finishing touches -----------------------------------
 
@@ -605,8 +638,25 @@ class Generator:
         return bank
 
     def _snapshots(self) -> None:
+        """Simulate the portfolio and book its contributions in the ledger.
+
+        Money only enters from outside as contributions: a new position's
+        first value, plus each position's monthly top-up. A position that
+        matures or is redeemed is reinvested in the cash balance, so it moves
+        inside the portfolio and books nothing, as in the real workbooks.
+        """
         assets = self._portfolio_assets()
+        cash = next(a for a in assets if a.name == "Saldo (CDI 100%)")
+        funds = next(a for a in assets if a.name == "FIIs")
+        closed: set[int] = set()
         for index, when in enumerate(self._snapshot_dates()):
+            for k, asset in enumerate(assets):
+                ended = asset.until is not None and when > asset.until
+                if ended and asset.history and k not in closed:
+                    cash.value += asset.value
+                    cash.cost += asset.value
+                    closed.add(k)
+            contributions = 0.0
             holdings = []
             for asset in assets:
                 if asset.start > when or (asset.until is not None and when > asset.until):
@@ -614,6 +664,8 @@ class Generator:
                 if not asset.history:
                     asset.value = asset.cost = asset.initial
                     previous = None
+                    if index > 0:
+                        contributions += asset.initial
                 else:
                     previous = asset.value
                     rate = asset.monthly_return
@@ -622,6 +674,7 @@ class Generator:
                     growth = 1 + self.rng.gauss(rate, asset.volatility)
                     asset.value = max(0.0, asset.value * growth + asset.contribution)
                     asset.cost += asset.contribution
+                    contributions += asset.contribution
                 asset.history[index] = asset.value
 
                 year_ago = asset.history.get(index - 12)
@@ -648,6 +701,19 @@ class Generator:
                     )
                 )
             self.snapshots.append(Snapshot(when, holdings))
+            if index > 0:
+                self._dividends(when, funds.value)
+            if index > 0 and contributions:
+                self.ledger[(when.year, when.month)].debits.append(
+                    Entry(
+                        "Aporte corretora",
+                        "Investimento",
+                        round(contributions, 2),
+                        # between the previous snapshot (previous month) and this one
+                        self._day(when.year, when.month, 10, when.day - 1),
+                        macro="n/a",
+                    )
+                )
 
 
 # --------------------------------------------------------------------------
