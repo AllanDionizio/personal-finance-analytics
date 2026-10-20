@@ -6,7 +6,7 @@
 
 > An end-to-end analytics engineering project that turns six years of household finance spreadsheets into a tested star schema and a self-serve dashboard.
 
-🚧 **Work in progress.** Ingestion, the synthetic dataset, the dbt models and the dashboard are done. Publishing the dashboard and the dbt docs is next; see [Roadmap](#roadmap).
+**Live:** [dashboard](https://allandionizio.github.io/personal-finance-analytics/) · [dbt docs](https://allandionizio.github.io/personal-finance-analytics/dbt-docs/), both built from the synthetic data on every push to `main`.
 
 ## Why this project
 
@@ -106,7 +106,7 @@ Running the ingestion end to end on the synthetic workbooks measured one suspect
 | Warehouse | DuckDB | Zero-infra, file-based, runs the same locally and in CI |
 | Transformation | dbt (`dbt-duckdb`) | Tested, documented, version-controlled SQL |
 | BI | Evidence | Dashboards as code (SQL + Markdown), versioned next to the models, built to a static site |
-| CI | GitHub Actions | Lint, tests, `dbt build` and the dashboard build on every pull request |
+| CI / CD | GitHub Actions, GitHub Pages | Lint, tests, `dbt build` and the dashboard build on every pull request; on `main`, the same build is published to Pages |
 
 ## How to run
 
@@ -125,7 +125,7 @@ make build      # dbt deps + dbt build (seeds, models, tests) + source freshness
 make dashboard  # npm ci + Evidence sources + static site in dashboards/build/
 ```
 
-Or all three with `make all`. The dashboard needs Node.js 18 or newer; `make dashboard-dev` serves it with live reload instead.
+Or all three with `make all`. The dashboard needs Node.js 18 or newer; `make dashboard-dev` serves it with live reload instead, under `/personal-finance-analytics/` like the published site. `make site` assembles exactly what GitHub Pages serves: the dashboard at the root and the dbt docs under `dbt-docs/`.
 
 No credentials or real data needed. The ingestion is idempotent: re-running on the same files reloads by `source_file` without duplicating rows. Unrecognized cell colors are logged with counts instead of failing the run.
 
@@ -140,6 +140,7 @@ No credentials or real data needed. The ingestion is idempotent: re-running on t
 - **Decision:** define the dashboard's metrics in a dbt mart (`fct_monthly_cashflow`) and keep the Evidence queries to selects and filters. **Why:** income, spending and savings get one tested, documented definition, and any other tool reading the warehouse adds them up the same way. **Trade-off:** a new metric means a dbt change, not only a dashboard edit.
 - **Decision:** open-source Evidence (`@evidence-dev/evidence`) built to a static site. **Why:** it deploys anywhere static files go, with no account or server, and builds in CI on the same synthetic warehouse. **Trade-off:** Evidence's project template now points to its hosted product, Evidence Studio, which has a different syntax; moving there later would mean rewriting the pages.
 - **Decision:** brand the dashboard through Evidence's theme tokens, a project Tailwind preset and one global stylesheet, instead of custom components. **Why:** the pages keep using the standard BigValue, chart and table components, and the cards come from the theme (charts are painted with the card color). **Trade-off:** a few selectors target Evidence's markup (the KPI and sidebar classes), so an Evidence upgrade can need a CSS touch-up; the strict build and the screenshots catch it.
+- **Decision:** publish from the CI job that tested the build, not from a separate workflow. **Why:** the site on Pages is byte for byte what passed `dbt build` and the strict dashboard build; a failing test means nothing is deployed. **Trade-off:** a push to `main` waits for the whole pipeline before the site updates.
 - **Decision:** detect the debit-side layout from the header row instead of fixed positions. **Why:** a column was added in 2022, so 2021 workbooks have a different layout. **Trade-off:** the header detection has to be tested against both layouts.
 
 ## Roadmap
@@ -153,7 +154,7 @@ No credentials or real data needed. The ingestion is idempotent: re-running on t
 - [x] dbt intermediate and marts
 - [x] dbt tests and column docs
 - [x] Evidence dashboard on the synthetic data, built in CI
-- [ ] Dashboard and dbt docs published on GitHub Pages
+- [x] Dashboard and dbt docs published on GitHub Pages
 
 ## Repository structure
 
