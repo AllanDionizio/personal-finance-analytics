@@ -35,6 +35,8 @@ The real workbooks hold a household's finances, so they never leave the owners' 
 - card purchases split into `(k/N)` installments that cross year boundaries
 - a portfolio sheet that stacks one block per snapshot, repeats the whole history in every year's file and gains columns over time
 - hand-typed noise: case and whitespace drift, legacy categories, blank macro-categories, stray highlight colors
+- a portfolio that agrees with the budget: the budget's investment rows are exactly what enters the portfolio, a maturing position is reinvested inside it, and dividends follow the fund position
+- a one-off asset sale received in installments and typed on the income side, which must not count as income
 
 Output is deterministic for a given seed, so tests and CI always see the same data.
 
@@ -47,7 +49,9 @@ Star schema built by dbt in three layers: staging cleans and types the raw table
 | `fct_transactions` | Fact | One row per transaction | Credits and debits, with installment and effective-amount flags |
 | `fct_installments` | Fact | One row per installment of every purchase | Full installment plans, including installments outside the workbooks' years; answers how much is still owed |
 | `fct_portfolio_snapshots` | Fact | One row per asset per reference date | Investment portfolio history |
-| `fct_monthly_cashflow` | Fact | One row per closed budget month | Income, spending (fixed / variable), investments and savings; the dashboard's metrics, defined once |
+| `fct_monthly_cashflow` | Fact | One row per closed budget month | Operating income, dividends, one-off income, spending (fixed / variable), investments and savings; the dashboard's metrics, defined once |
+| `fct_net_worth` | Fact | One row per portfolio snapshot | Value, contributions, modified Dietz return and inflation over the same periods (12 months and year to date), liquid reserve against its target |
+| `fct_inflation_monthly` | Fact | One row per month | Official inflation (IPCA) with its price index, 12-month and year-to-date rates |
 | `dim_date` | Dimension | One row per day | Generated calendar |
 | `dim_category` | Dimension | One row per category | Category, macro-category (fixed / variable), type |
 | `dim_owner` | Dimension | One row per owner | Derived from cell colors |
@@ -61,25 +65,27 @@ Star schema built by dbt in three layers: staging cleans and types the raw table
 - dbt data tests on every staging key and accepted-value set, plus source freshness on the raw tables
 - dbt unit tests that pin the modeling rules (installment parsing, per-workbook theme colors, card precedence, macro-category fallback, snapshot dedup, asset aliases, installments outside the workbooks) on hand-made rows
 - Relationship tests from every fact key to its dimension
-- Reconciliation tests: every raw transaction reaches the fact with its amount, each portfolio snapshot total matches its newest source file, each installment plan adds up to its purchase, and the monthly cash flow adds up to the transactions it summarizes
+- Reconciliation tests: every raw transaction reaches the fact with its amount, each portfolio snapshot total matches its newest source file, each installment plan adds up to its purchase, the monthly cash flow adds up to the transactions it summarizes, and every contribution and dividend lands in exactly one portfolio period
+- Unit tests for the metric rules too: closed months only, asset sales outside income, the modified Dietz return (checked to fail when the formula is broken) and the 12-month requirement of the reserve
 - Range and row-count checks with `dbt_expectations`, plus a custom generic test (`is_first_day_of_month`) on every `budget_month`
 - Every model and source column documented, shared definitions written once as doc blocks
 - `dbt build` on every pull request, on a warehouse rebuilt from the synthetic workbooks, followed by a strict dashboard build that fails on any broken query or component
 
 ## Dashboard
 
-![Dashboard overview: income, spending and savings rate for the last 12 closed months, and income against spending by month](docs/img/dashboard-overview.png)
+![Executive summary: a written summary of the last 12 months, six KPIs and the monthly result](docs/img/dashboard-overview.png)
 
-Four Evidence pages (`dashboards/`) over the marts, built as a static site:
+Five Evidence pages (`dashboards/`) over the marts, built as a static site. They read as one story, in the order a CFO would ask:
 
-| Page | Answers |
-| --- | --- |
-| Overview | Income, spending and savings rate over the last 12 closed months against the 12 before; income against spending by month; savings rate by year |
-| Spending | How fixed and variable costs evolved; spending by category and by card for a chosen year |
-| Installments | How much is still owed and when each month's installments fall due, including installments past the newest workbook; open purchases |
-| Portfolio | Portfolio value over time, its mix by asset class and the holdings in the latest snapshot |
+| Page | Question | Highlights |
+| --- | --- | --- |
+| Household finances | Is the household healthy? | A summary written from the numbers; portfolio, savings rate, real return, fixed-cost share, liquid reserve and installments owed; surplus or deficit by month |
+| Income | Where does the money come from, and how stable is it? | Operating income and its real growth; income by source and by owner; dividends as a share of spending; one-off money kept apart |
+| Spending | Where does it go, and what changed? | Real spending growth; the categories that moved most in a year; spending against income and inflation, indexed; fixed against variable costs |
+| Installments | How much of the future is committed? | Amount still owed, in months of income; what falls due each month, past the newest workbook; open purchases |
+| Portfolio | Does it grow from contributions or returns, and does it beat inflation? | Value against invested capital; return against IPCA by year and over rolling 12 months; liquid reserve against its 6–12 month band; maturity ladder; concentration; dividends |
 
-The metrics live in dbt (`fct_monthly_cashflow`), where they are tested and documented; Evidence only reads the marts and filters them. A month counts once it is closed, so the month still being paid doesn't drag the totals down.
+The metrics live in dbt (`fct_monthly_cashflow`, `fct_net_worth`, `fct_inflation_monthly`), where they are tested and documented; Evidence only reads the marts and filters them. A month counts once it is closed, so the month still being paid doesn't drag the totals down.
 
 ## Bugs the synthetic data caught
 
@@ -126,6 +132,9 @@ No credentials or real data needed. The ingestion is idempotent: re-running on t
 - **Decision:** English names for everything the project defines, source values left in Portuguese. **Why:** the code and models read for an international audience, while the raw layer stays a faithful copy of the workbooks (`'Sim'`, `'Mercado'`, `'Fixo'`). **Trade-off:** staging has to map the Portuguese values that drive logic, such as the paid flag and the special categories.
 - **Decision:** keep the raw layer literal (installment suffixes and raw color codes untouched). **Why:** parsing rules can change and be replayed in dbt without re-reading the workbooks. **Trade-off:** the raw tables are not directly queryable for analysis.
 - **Decision:** resolve both `rgb` and `theme` color references. **Why:** Google Sheets exports the same visible color either as a hex value or as a theme index, depending on how it was applied. The ingestion loads each workbook's theme palette into `raw.workbook_themes`, so dbt resolves a theme index against the file it came from. **Trade-off:** one more raw table, and theme tints are not applied (the owner colors in these workbooks have none).
+- **Decision:** keep money from selling an asset (the `'Investimentos'` income category) out of income, as non-operating income. **Why:** it is real cash in but doesn't repeat; counted as income, it would inflate the savings rate of the year it lands in. **Trade-off:** the split lives in a seed (`income_groups`) that has to follow how the categories are used.
+- **Decision:** measure the portfolio's return with the modified Dietz method, taking the recorded contributions as the only external flow and counting dividends as return. **Why:** the workbooks record contributions but not withdrawals (a maturing asset is reinvested inside the portfolio), and Dietz handles flows in the middle of a period without daily valuations. **Trade-off:** a withdrawal to spend that isn't recorded understates that period's return; it can't overstate it.
+- **Decision:** official inflation (IPCA) as a versioned seed from the Central Bank's public API, compounded over the same periods as the return. **Why:** the build stays reproducible and offline, and "did we beat inflation?" compares like with like. **Trade-off:** the seed is refreshed by hand when a new month is published.
 - **Decision:** define the dashboard's metrics in a dbt mart (`fct_monthly_cashflow`) and keep the Evidence queries to selects and filters. **Why:** income, spending and savings get one tested, documented definition, and any other tool reading the warehouse adds them up the same way. **Trade-off:** a new metric means a dbt change, not only a dashboard edit.
 - **Decision:** open-source Evidence (`@evidence-dev/evidence`) built to a static site. **Why:** it deploys anywhere static files go, with no account or server, and builds in CI on the same synthetic warehouse. **Trade-off:** Evidence's project template now points to its hosted product, Evidence Studio, which has a different syntax; moving there later would mean rewriting the pages.
 - **Decision:** detect the debit-side layout from the header row instead of fixed positions. **Why:** a column was added in 2022, so 2021 workbooks have a different layout. **Trade-off:** the header detection has to be tested against both layouts.
