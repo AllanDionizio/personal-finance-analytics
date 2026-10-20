@@ -34,3 +34,32 @@ unit_tests:
         - {purchase_id: "p2", installment_number: 2, budget_month: "2026-11-01", is_recorded: true, is_settled: false, outstanding_amount: 80}
         - {purchase_id: "p2", installment_number: 3, budget_month: "2026-12-01", is_recorded: true, is_settled: false, outstanding_amount: 80}
         - {purchase_id: "p2", installment_number: 4, budget_month: "2027-01-01", is_recorded: false, is_settled: false, outstanding_amount: 80}
+
+  - name: test_monthly_cashflow_counts_closed_months_only
+    description: >
+      The as-of month is March 2026, so only January and February are closed. The investment
+      contribution is not spending, and the unpaid March bill is left out with its month.
+    model: fct_monthly_cashflow
+    given:
+      - input: ref('stg_transactions')
+        rows:
+          - {budget_month: "2026-03-01", is_settled: true}
+      - input: ref('fct_transactions')
+        rows:
+          - {budget_month: "2026-01-01", side: "credit", category_key: "inc", amount: 1000, effective_amount: 1000, is_settled: true, is_investment_contribution: false}
+          - {budget_month: "2026-01-01", side: "debit", category_key: "fix", amount: 300, effective_amount: 300, is_settled: true, is_investment_contribution: false}
+          - {budget_month: "2026-01-01", side: "debit", category_key: "inv", amount: 200, effective_amount: 0, is_settled: true, is_investment_contribution: true}
+          - {budget_month: "2026-02-01", side: "debit", category_key: "var", amount: 50, effective_amount: 50, is_settled: true, is_investment_contribution: false}
+          - {budget_month: "2026-02-01", side: "debit", category_key: "unknown", amount: 10, effective_amount: 10, is_settled: true, is_investment_contribution: false}
+          - {budget_month: "2026-03-01", side: "debit", category_key: "fix", amount: 300, effective_amount: 0, is_settled: false, is_investment_contribution: false}
+      - input: ref('dim_category')
+        rows:
+          - {category_key: "inc", macro_category: null}
+          - {category_key: "fix", macro_category: "Fixed"}
+          - {category_key: "var", macro_category: "Variable"}
+          - {category_key: "inv", macro_category: "Not applicable"}
+          - {category_key: "unknown", macro_category: "Unknown"}
+    expect:
+      rows:
+        - {budget_month: "2026-01-01", income: 1000, spending: 300, fixed_spending: 300, variable_spending: 0, unclassified_spending: 0, invested: 200, savings: 700}
+        - {budget_month: "2026-02-01", income: 0, spending: 60, fixed_spending: 0, variable_spending: 50, unclassified_spending: 10, invested: 0, savings: -60}

@@ -18,9 +18,7 @@ purchases as (
 
 as_of as (
 
-    select max(budget_month) as as_of_month
-    from {{ ref('stg_transactions') }}
-    where is_settled
+    {{ as_of_month() }}
 
 ),
 
