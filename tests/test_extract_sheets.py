@@ -5,12 +5,14 @@ from __future__ import annotations
 import logging
 import shutil
 from collections import Counter
+from datetime import datetime
 from pathlib import Path
 
 import duckdb
 import pytest
+from openpyxl import Workbook
 
-from ingestion.extract_sheets import run
+from ingestion.extract_sheets import _read_transaction, run
 from synthetic import catalog
 from synthetic.generate import (
     FILE_TEMPLATE,
@@ -134,3 +136,24 @@ def test_theme_colors_resolve_through_the_workbook_palette(con) -> None:
         catalog.PERSON_A_THEME: catalog.PERSON_A_RGB[2:],
         catalog.PERSON_B_THEME: catalog.PERSON_B_RGB[2:],
     }
+
+
+@pytest.mark.parametrize(
+    ("description", "amount", "when", "kept"),
+    [
+        ("FIIA11", None, None, False),  # placeholder: ticker typed before the dividend
+        (None, None, None, False),
+        ("Vale-refeição", 0, None, True),  # a zero amount is information
+        ("Mercado", None, datetime(2026, 1, 5), True),
+        (None, 12.5, None, True),
+    ],
+)
+def test_side_without_amount_and_date_is_skipped(description, amount, when, kept) -> None:
+    ws = Workbook().active
+    ws.title = "JAN"
+    ws["A2"], ws["B2"], ws["C2"] = description, amount, when
+    colmap = {"description": 1, "amount": 2, "date": 3}
+
+    rec = _read_transaction(ws, 2, "credit", colmap, "x 2026.xlsx", [], Counter(), datetime.now())
+
+    assert (rec is not None) == kept

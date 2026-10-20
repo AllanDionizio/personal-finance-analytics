@@ -1,5 +1,6 @@
 -- One row per transaction: typed, colors resolved to owner / payment method,
--- installment tag parsed, flags for the categories that drive logic.
+-- installment tag parsed, old category names renamed, flags for the
+-- categories that drive logic.
 -- Rules: docs/data-model.md, sections 3 and 6.
 
 with
@@ -28,10 +29,17 @@ categories as (
 
 ),
 
+renames as (
+
+    select * from {{ ref('category_renames') }}
+
+),
+
 parsed as (
 
     select
         source.*,
+        case source.side when 'credit' then 'income' else 'expense' end as category_type,
         cast(regexp_extract(source.source_file, '(20\d{2})', 1) as integer) as file_year,
         list_position(
             ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'],
@@ -88,36 +96,41 @@ colored as (
 typed as (
 
     select
-        transaction_id,
-        transaction_date,
-        make_date(file_year, sheet_month, 1) as budget_month,
-        side,
-        case side when 'credit' then 'income' else 'expense' end as category_type,
-        {{ clean_description('description') }} as description,
-        description as raw_description,
-        trim(category) as category,
-        nullif(trim(macro_category), '') as raw_macro_category,
-        amount,
+        colored.transaction_id,
+        colored.transaction_date,
+        make_date(colored.file_year, colored.sheet_month, 1) as budget_month,
+        colored.side,
+        colored.category_type,
+        {{ clean_description('colored.description') }} as description,
+        colored.description as raw_description,
+        -- An old name the canonical list changed is read as the new one.
+        coalesce(renames.renamed_to, trim(colored.category)) as category,
+        nullif(trim(colored.macro_category), '') as raw_macro_category,
+        colored.amount,
         -- 2021 workbooks don't color credits by owner (data-model 6.2).
         case
-            when side = 'debit' then null
-            when file_year = 2021 then 'Person A'
-            else coalesce(amount_owner, 'Other')
+            when colored.side = 'debit' then null
+            when colored.file_year = 2021 then 'Person A'
+            else coalesce(colored.amount_owner, 'Other')
         end as owner,
         -- A known card on the amount cell wins; the description cell is the
         -- fallback. Any other color, such as a manual highlight, is 'Other'.
         case
-            when side = 'credit' then null
-            else coalesce(amount_card, description_card, 'Other')
+            when colored.side = 'credit' then null
+            else coalesce(colored.amount_card, colored.description_card, 'Other')
         end as payment_method,
-        coalesce(lower(trim(status)) = 'sim', false) as is_settled,
-        coalesce(cast(tag_number as integer), 1) as installment_number,
-        coalesce(cast(tag_count as integer), 1) as installment_count,
-        source_file,
-        source_sheet,
-        source_row,
-        extracted_at
+        coalesce(lower(trim(colored.status)) = 'sim', false) as is_settled,
+        coalesce(cast(colored.tag_number as integer), 1) as installment_number,
+        coalesce(cast(colored.tag_count as integer), 1) as installment_count,
+        colored.source_file,
+        colored.source_sheet,
+        colored.source_row,
+        colored.extracted_at
     from colored
+    left join renames
+        on
+            colored.category_type = renames.category_type
+            and trim(colored.category) = renames.category
 
 )
 

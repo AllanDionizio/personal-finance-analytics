@@ -172,14 +172,15 @@ models:
                 field: purchase_id
       - name: amount
         description: >
-          Amount as typed; `side` says the direction. Positive except card adjustments, which
-          are negative (a discount on the card bill).
+          Amount as typed; `side` says the direction. Credits are never negative. A negative
+          debit is a refund or discount (an estorno, a discount for paying installments early)
+          and nets against its category's spending; card adjustments are negative too.
         data_tests:
           - not_null
           - dbt_expectations.expect_column_values_to_be_between:
               arguments:
                 min_value: 0
-                row_condition: not is_card_adjustment
+                row_condition: side = 'credit'
       - name: effective_amount
         description: amount if is_effective, else 0.
       - name: signed_effective_amount

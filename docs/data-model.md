@@ -143,7 +143,8 @@ frequent spelling, since case drifts when typed by hand (`'Banco alfa
 (fundos)'`). `asset_class` is inferred from the asset name: `'Real estate
 fund'` (FIIs), `'Fixed income'` (CDB, LCI, CRI, CCB, Tesouro, CDI-indexed),
 `'Multimarket fund'`, `'Crypto'`, `'Cash'` (account balance) or `'Other'`
-(FGTS, pension, equity). `snapshot_id` is `hash(reference_date|bank|asset)`.
+(FGTS, pension, equity). `snapshot_id` is `hash(reference_date|bank|asset|maturity_date)`, since two
+lots of the same product differ only by their maturity date.
 
 ### `stg_categories`
 
@@ -152,6 +153,10 @@ files (seed `legacy_categories`, e.g. `'Farmácia'`, `'Uber'`), keyed by
 `category_key = hash(category_type|category)`. The macro-category is
 translated: `'Fixo'` → `'Fixed'`, `'Variável'` → `'Variable'`, `'n/a'` →
 `'Not applicable'`.
+
+A category the list later renamed (seed `category_renames`, e.g. `'Pets'` →
+`'Pets Necessidades'`) is read as the new name in `stg_transactions`, so its
+history joins the current category instead of becoming a legacy one.
 
 ## 4. Intermediate and marts
 
@@ -179,7 +184,7 @@ on debits and `payment_method_key` on credits, which a test enforces.
 | `fct_monthly_cashflow` | one row per closed budget month (6.10) | `budget_month`, `income` (operating), `non_operating_income`, `dividends`, `spending`, `fixed_spending`, `variable_spending`, `unclassified_spending`, `invested`, `savings` (`income − spending`) |
 | `fct_net_worth` | one row per portfolio snapshot (6.11) | `reference_date`, `total_value`, `liquid_reserve`, `contributions`, `dividends`, `period_return`, `period_inflation`, `return_12m`, `inflation_12m`, `real_return_12m`, the same year to date, `runway_months`, `reserve_months`, `reserve_status` |
 | `fct_inflation_monthly` | one row per month (6.12) | `month`, `ipca_pct`, `ipca_rate`, `price_index`, `ipca_12m`, `ipca_ytd` |
-| `fct_portfolio_snapshots` | one row per asset per reference date | `snapshot_id` (`hash(reference_date\|bank\|asset)`), `reference_date`, `bank`, `asset`, `asset_class` (`'Real estate fund'` / `'Fixed income'` / `'Multimarket fund'` / `'Crypto'` / `'Cash'` / `'Other'`), `gross_value`, `allocation_pct`, `maturity_date`, `mom`, `yoy` |
+| `fct_portfolio_snapshots` | one row per asset per reference date | `snapshot_id` (`hash(reference_date\|bank\|asset\|maturity_date)`), `reference_date`, `bank`, `asset`, `asset_class` (`'Real estate fund'` / `'Fixed income'` / `'Multimarket fund'` / `'Crypto'` / `'Cash'` / `'Other'`), `gross_value`, `allocation_pct`, `maturity_date`, `mom`, `yoy` |
 
 ## 5. Source → model mapping
 
@@ -336,9 +341,10 @@ each sheet row.
 
 ### 6.6 Empty rows
 
-A side is empty when description, amount and date are all null; it is
-skipped. A zero amount (e.g. a benefit row left at 0) is **kept**, since
-"no payment this month" is information.
+A side is empty when amount and date are both null; it is skipped. A
+description alone is a placeholder, such as a fund ticker typed before its
+dividend is paid. A zero amount (e.g. a benefit row left at 0) is **kept**,
+since "no payment this month" is information.
 
 ### 6.7 Categories with dedicated flags
 
@@ -399,7 +405,7 @@ them up the same way:
   savings rate (seed `income_groups`, `is_operating = false`). Dividends are
   operating income and also get their own column. **Spending**:
   `effective_amount` of debits, so investment contributions (not effective)
-  are left out and card adjustments (negative) lower it.
+  are left out, and refunds and card adjustments (negative debits) lower it.
 - **Fixed / variable / unclassified**: spending split by the category's
   macro-category; unclassified covers `'Unknown'` and blanks. The three add
   up to spending (tested).

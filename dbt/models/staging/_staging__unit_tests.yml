@@ -19,6 +19,8 @@ unit_tests:
         rows: []
       - input: ref('color_mapping')
         rows: []
+      - input: ref('category_renames')
+        rows: []
       - input: ref('stg_categories')
         rows: []
     expect:
@@ -51,6 +53,8 @@ unit_tests:
         rows:
           - {hex: "4BACC6", dimension: "owner", value: "Person A"}
           - {hex: "F79646", dimension: "owner", value: "Person B"}
+      - input: ref('category_renames')
+        rows: []
       - input: ref('stg_categories')
         rows: []
     expect:
@@ -80,6 +84,8 @@ unit_tests:
           - {hex: "B4A7D6", dimension: "payment_method", value: "Card A"}
           - {hex: "8E7CC3", dimension: "payment_method", value: "Card B"}
           - {hex: "9FC5E8", dimension: "payment_method", value: "Card C"}
+      - input: ref('category_renames')
+        rows: []
       - input: ref('stg_categories')
         rows: []
     expect:
@@ -92,8 +98,8 @@ unit_tests:
   - name: test_macro_category_and_flags
     description: >
       A typed macro-category wins; otherwise it comes from the category list,
-      and a category in no list is 'Unknown'. Investment contributions are not
-      effective.
+      and a category in no list is 'Unknown'. An old name is read as its
+      renamed category. Investment contributions are not effective.
     model: stg_transactions
     given:
       - input: source('raw', 'transactions')
@@ -103,22 +109,28 @@ unit_tests:
           - {transaction_id: "3", source_file: "x 2021.xlsx", source_sheet: "JAN", side: "debit", category: "Algo Novo", macro_category: null, status: "Sim"}
           - {transaction_id: "4", source_file: "x 2023.xlsx", source_sheet: "JAN", side: "debit", category: "Investimento", macro_category: "n/a", status: "Sim"}
           - {transaction_id: "5", source_file: "x 2023.xlsx", source_sheet: "JAN", side: "credit", category: "Proventos", macro_category: null, status: "Não"}
+          - {transaction_id: "6", source_file: "x 2021.xlsx", source_sheet: "JAN", side: "debit", category: "Pets ", macro_category: null, status: "Sim"}
       - input: source('raw', 'workbook_themes')
         rows: []
       - input: ref('color_mapping')
         rows: []
+      - input: ref('category_renames')
+        rows:
+          - {category_type: "expense", category: "Pets", renamed_to: "Pets Necessidades"}
       - input: ref('stg_categories')
         rows:
+          - {category_key: "k_pets", category_type: "expense", category: "Pets Necessidades", macro_category: "Fixed"}
           - {category_key: "k_uber", category_type: "expense", category: "Uber", macro_category: "Variable"}
           - {category_key: "k_inv", category_type: "expense", category: "Investimento", macro_category: "Not applicable"}
           - {category_key: "k_prov", category_type: "income", category: "Proventos", macro_category: null}
     expect:
       rows:
-        - {transaction_id: "1", category_key: null, macro_category: "Fixed", is_settled: true, is_effective: true, is_dividend: false, is_investment_contribution: false}
-        - {transaction_id: "2", category_key: "k_uber", macro_category: "Variable", is_settled: true, is_effective: true, is_dividend: false, is_investment_contribution: false}
-        - {transaction_id: "3", category_key: null, macro_category: "Unknown", is_settled: true, is_effective: true, is_dividend: false, is_investment_contribution: false}
-        - {transaction_id: "4", category_key: "k_inv", macro_category: "Not applicable", is_settled: true, is_effective: false, is_dividend: false, is_investment_contribution: true}
-        - {transaction_id: "5", category_key: "k_prov", macro_category: null, is_settled: false, is_effective: false, is_dividend: true, is_investment_contribution: false}
+        - {transaction_id: "1", category_key: null, category: "Mercado", macro_category: "Fixed", is_settled: true, is_effective: true, is_dividend: false, is_investment_contribution: false}
+        - {transaction_id: "2", category_key: "k_uber", category: "Uber", macro_category: "Variable", is_settled: true, is_effective: true, is_dividend: false, is_investment_contribution: false}
+        - {transaction_id: "3", category_key: null, category: "Algo Novo", macro_category: "Unknown", is_settled: true, is_effective: true, is_dividend: false, is_investment_contribution: false}
+        - {transaction_id: "4", category_key: "k_inv", category: "Investimento", macro_category: "Not applicable", is_settled: true, is_effective: false, is_dividend: false, is_investment_contribution: true}
+        - {transaction_id: "5", category_key: "k_prov", category: "Proventos", macro_category: null, is_settled: false, is_effective: false, is_dividend: true, is_investment_contribution: false}
+        - {transaction_id: "6", category_key: "k_pets", category: "Pets Necessidades", macro_category: "Fixed", is_settled: true, is_effective: true, is_dividend: false, is_investment_contribution: false}
 
   - name: test_portfolio_keeps_the_newest_file
     description: >

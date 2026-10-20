@@ -165,7 +165,7 @@ models:
       an asset name map back to the asset, and each asset gets an inferred asset class.
     columns:
       - name: snapshot_id
-        description: Surrogate key of (reference_date, bank, asset).
+        description: Surrogate key of (reference_date, bank, asset, maturity_date).
         data_tests:
           - unique
           - not_null

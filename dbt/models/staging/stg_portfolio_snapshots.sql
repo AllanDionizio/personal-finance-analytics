@@ -73,8 +73,10 @@ cleaned as (
 )
 
 select
-    {{ dbt_utils.generate_surrogate_key(['reference_date', 'clean_bank', 'clean_asset']) }}
-        as snapshot_id,
+    -- Two lots of the same product differ only by their maturity date.
+    {{ dbt_utils.generate_surrogate_key([
+        'reference_date', 'clean_bank', 'clean_asset', 'maturity_date'
+    ]) }} as snapshot_id,
     reference_date,
     clean_bank as bank,
     clean_asset as asset,
