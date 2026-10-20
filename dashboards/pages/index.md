@@ -1,12 +1,11 @@
 ---
 title: Household finances
+sidebar_position: 1
 ---
 
-Six years of a couple's monthly budget workbooks, modeled with dbt into a star schema. Every number here comes from the **synthetic dataset** the repository generates, never from real finances.
-
-Months count once they are closed: the month still being paid is left out of the totals, because its income and bills are only partly settled.
-
-```sql last_12_months
+```sql ttm
+-- Last 12 closed months against the 12 before. The month still being paid is
+-- not in monthly_cashflow, so a partial month never drags the totals down.
 with ranked as (
     select
         *,
@@ -16,150 +15,150 @@ with ranked as (
 select
     sum(income) filter (where month_rank <= 12) as income,
     sum(spending) filter (where month_rank <= 12) as spending,
-    sum(savings) filter (where month_rank <= 12)
-        / sum(income) filter (where month_rank <= 12) as savings_rate,
+    sum(savings) filter (where month_rank <= 12) as savings,
+    sum(fixed_spending) filter (where month_rank <= 12) as fixed_spending,
     sum(income) filter (where month_rank between 13 and 24) as prior_income,
-    sum(spending) filter (where month_rank between 13 and 24) as prior_spending,
-    sum(savings) filter (where month_rank between 13 and 24)
-        / sum(income) filter (where month_rank between 13 and 24) as prior_savings_rate,
+    sum(savings) filter (where month_rank between 13 and 24) as prior_savings,
+    sum(fixed_spending) filter (where month_rank between 13 and 24) as prior_fixed_spending,
     strftime(max(budget_month) filter (where month_rank = 1), '%b %Y') as through_month
 from ranked
 ```
 
 ```sql kpis
 select
-    income,
-    spending,
-    savings_rate,
-    income / prior_income - 1 as income_change,
-    spending / prior_spending - 1 as spending_change,
-    (savings_rate - prior_savings_rate) * 100 as savings_rate_change_pts
-from ${last_12_months}
+    *,
+    savings / income as savings_rate,
+    (savings / income - prior_savings / prior_income) * 100 as savings_rate_change_pts,
+    fixed_spending / income as fixed_share,
+    (fixed_spending / income - prior_fixed_spending / prior_income) * 100 as fixed_share_change_pts
+from ${ttm}
 ```
 
-```sql net_worth
+```sql worth
+-- Newest snapshot first: BigValue shows the first row and draws the sparkline
+-- from all of them. Noon UTC keeps each date on its day in every time zone.
 select
-    reference_date,
-    -- noon UTC keeps the sparkline's dates on the right day in every time zone
+    now_.*,
+    now_.reference_date + interval 12 hours as snapshot_at,
+    now_.total_value / year_ago.total_value - 1 as value_change_1y
+from warehouse.net_worth as now_
+asof left join warehouse.net_worth as year_ago
+    on now_.reference_date - interval 1 year >= year_ago.reference_date
+order by now_.reference_date desc
+```
+
+```sql real_return
+-- The newest snapshot whose 12-month return can be compared with inflation
+select
+    *,
     reference_date + interval 12 hours as snapshot_at,
-    sum(gross_value) as net_worth
-from warehouse.portfolio
-group by reference_date
--- BigValue shows the first row, so the newest snapshot goes first
+    strftime(reference_date, '%b %Y') as through_month
+from warehouse.net_worth
+where real_return_12m is not null
 order by reference_date desc
 ```
 
 ```sql owed
-select sum(outstanding_amount) as owed
+select
+    sum(outstanding_amount) as owed,
+    sum(outstanding_amount) / ((select income from ${ttm}) / 12) as months_of_income
 from warehouse.installments
 ```
 
-## Last 12 closed months, through <Value data={last_12_months} column=through_month />
+<!-- fmt() instead of <Value>: Value leaves a space before the punctuation that follows it -->
+
+Over the 12 months through **{kpis[0]?.through_month}**, the household earned **{fmt(kpis[0]?.income, 'brl0')}**, spent **{fmt(kpis[0]?.spending, 'brl0')}** and kept **{fmt(kpis[0]?.savings_rate, 'pct1')}** of its income.
+
+The portfolio is worth **{fmt(worth[0]?.total_value, 'brl0')}**, {fmt(Math.abs(worth[0]?.value_change_1y), 'pct1')} {worth[0]?.value_change_1y >= 0 ? 'more' : 'less'} than a year earlier. Over the 12 months through {real_return[0]?.through_month}, it returned {fmt(real_return[0]?.return_12m, 'pct1')} against {fmt(real_return[0]?.inflation_12m, 'pct1')} of inflation (IPCA): {#if real_return[0]?.real_return_12m >= 0}a real gain of **{fmt(real_return[0]?.real_return_12m, 'pct1')}**{:else}a real **loss** of {fmt(Math.abs(real_return[0]?.real_return_12m), 'pct1')}{/if}.
+
+The liquid reserve covers **{fmt(worth[0]?.reserve_months, 'num1')} months** of fixed costs ({worth[0]?.reserve_status?.toLowerCase()}: 6 to 12 months). Installments still owed add up to **{fmt(owed[0]?.owed, 'brl0')}**, about {fmt(owed[0]?.months_of_income, 'num1')} months of income.
 
 <BigValue
-    data={kpis}
-    value=income
-    title="Income"
+    data={worth}
+    value=total_value
+    title="Portfolio"
     fmt=brl1k
-    comparison=income_change
+    comparison=value_change_1y
     comparisonFmt=pct1
-    comparisonTitle="vs prior 12 months"
-/>
-<BigValue
-    data={kpis}
-    value=spending
-    title="Spending"
-    fmt=brl1k
-    comparison=spending_change
-    comparisonFmt=pct1
-    comparisonTitle="vs prior 12 months"
-    downIsGood=true
+    comparisonTitle="in a year"
+    sparkline=snapshot_at
+    sparklineType=area
+    link="/portfolio"
 />
 <BigValue
     data={kpis}
     value=savings_rate
-    title="Savings rate"
+    title="Savings rate, 12 months"
     fmt=pct1
     comparison=savings_rate_change_pts
     comparisonFmt=num1
     comparisonTitle="pts vs prior 12 months"
 />
 <BigValue
-    data={net_worth}
-    value=net_worth
-    title="Portfolio, latest snapshot"
-    fmt=brl1k
+    data={real_return}
+    value=real_return_12m
+    title="Real return, 12 months"
+    fmt=pct1
     sparkline=snapshot_at
-    sparklineType=area
+    link="/portfolio"
+/>
+<BigValue
+    data={kpis}
+    value=fixed_share
+    title="Fixed costs, share of income"
+    fmt=pct1
+    comparison=fixed_share_change_pts
+    comparisonFmt=num1
+    comparisonTitle="pts vs prior 12 months"
+    downIsGood=true
+    link="/spending"
+/>
+<BigValue
+    data={worth}
+    value=reserve_months
+    title="Liquid reserve, months of fixed costs"
+    fmt=num1
+    sparkline=snapshot_at
+    link="/portfolio"
 />
 <BigValue
     data={owed}
     value=owed
     title="Still owed in installments"
-    fmt=brl
+    fmt=brl0
     link="/installments"
 />
 
-## Income and spending by month
+## Monthly result
 
-```sql monthly_long
+```sql monthly_result
 -- Months are drawn mid-month: a date at midnight UTC shows up as the previous
 -- day (and month) in browsers west of UTC, mid-month can't cross a month.
-select budget_month + interval 14 days as month, 'Income' as measure, income as amount
+select
+    budget_month + interval 14 days as month,
+    savings as result,
+    case when savings >= 0 then 'Surplus' else 'Deficit' end as outcome
 from warehouse.monthly_cashflow
-union all
-select budget_month + interval 14 days as month, 'Spending' as measure, spending as amount
-from warehouse.monthly_cashflow
-order by month, measure
+order by month
 ```
 
-<LineChart
-    data={monthly_long}
+<BarChart
+    data={monthly_result}
     x=month
-    y=amount
-    series=measure
-    seriesOrder={['Income', 'Spending']}
+    y=result
+    series=outcome
+    seriesColors={{'Surplus': '#2a78d6', 'Deficit': '#e34948'}}
     yFmt=brl0k
     xFmt="mmm yyyy"
 />
 
-The income peaks are profit sharing (January and July), the 13th salary (November and December) and vacation pay. Spending moves less, because fixed costs make up most of it (see [Spending](/spending)).
+Income minus spending, month by month. The surplus is what pays for the contributions on the [portfolio](/portfolio) page.
 
-## By year
+## The rest of the story
 
-```sql yearly
-select
-    budget_year as year,
-    count(*) as closed_months,
-    sum(income) as income,
-    sum(spending) as spending,
-    sum(invested) as invested,
-    sum(savings) as savings,
-    sum(savings) / sum(income) as savings_rate
-from warehouse.monthly_cashflow
-group by budget_year
-order by budget_year
-```
+- **[Income](/income)**: where the money comes from, and how much of it is salary, variable pay or dividends
+- **[Spending](/spending)**: where it goes, what changed over the last year, and whether spending is outpacing income and inflation
+- **[Installments](/installments)**: how much of the future is already committed
+- **[Portfolio](/portfolio)**: whether the portfolio grows from contributions or from returns, and whether it beats inflation
 
-<BarChart
-    data={yearly}
-    x=year
-    y=savings_rate
-    yFmt=pct0
-    title="Savings rate"
-    sort=false
-    labels=true
-    labelFmt=pct0
-/>
-
-<DataTable data={yearly}>
-    <Column id=year />
-    <Column id=closed_months title="Closed months" />
-    <Column id=income fmt=brl0 />
-    <Column id=spending fmt=brl0 />
-    <Column id=invested fmt=brl0 title="Into investments" />
-    <Column id=savings fmt=brl0 />
-    <Column id=savings_rate fmt=pct1 title="Savings rate" />
-</DataTable>
-
-Savings is income minus spending: the part moved into investments plus what stayed in the account.
+<small>Synthetic data generated by the repository, never real finances. A month counts once it is closed.</small>
