@@ -432,8 +432,9 @@ models:
           - not_null
       - name: contributions
         description: >
-          Settled investment contributions dated after the previous snapshot, up to this one.
-          The only external flow the workbooks record. NULL for the first snapshot.
+          Investment contributions dated after the previous snapshot, up to this one, whatever
+          their status (the sheets leave them at 'Não'). The only external flow the workbooks
+          record. NULL for the first snapshot.
       - name: dividends
         description: >
           Settled dividends paid in the same window, counted as return. NULL for the first
@@ -471,8 +472,8 @@ models:
         description: (1 + return_ytd) / (1 + inflation_ytd) - 1.
       - name: avg_monthly_spending
         description: >
-          Average monthly spending over the 12 closed months up to the snapshot's month; NULL
-          with fewer.
+          Average monthly spending over the last 12 closed months up to the snapshot's month
+          (a snapshot in the current, open month uses the 12 before it); NULL with fewer.
       - name: avg_monthly_fixed_spending
         description: Average monthly fixed spending over the same 12 months.
       - name: runway_months

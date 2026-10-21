@@ -1,6 +1,6 @@
--- Every settled contribution and dividend between the first and the last
--- snapshot lands in exactly one period of fct_net_worth: the windows neither
--- overlap nor leave gaps.
+-- Every contribution (whatever its status) and every settled dividend
+-- between the first and the last snapshot lands in exactly one period of
+-- fct_net_worth: the windows neither overlap nor leave gaps.
 
 with
 
@@ -17,12 +17,11 @@ transactions as (
 
     select
         sum(amount) filter (where is_investment_contribution) as contributions,
-        sum(amount) filter (where is_dividend) as dividends
+        sum(amount) filter (where is_dividend and is_settled) as dividends
     from {{ ref('fct_transactions') }}
     cross join bounds
     where
-        is_settled
-        and coalesce(transaction_date, budget_month + 14) > bounds.first_date
+        coalesce(transaction_date, budget_month + 14) > bounds.first_date
         and coalesce(transaction_date, budget_month + 14) <= bounds.last_date
 
 ),

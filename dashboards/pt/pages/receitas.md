@@ -208,7 +208,7 @@ select
 from warehouse.monthly_cashflow as m
 inner join ${years} as y on m.budget_year = y.year
 group by y.year_label, y.closed_months
-order by y.year_label
+order by y.year_label desc
 ```
 
 <DataTable data={yearly}>
@@ -235,7 +235,7 @@ select
     effective_amount as amount
 from ${closed_credits}
 where not is_operating
-order by budget_month
+order by budget_month desc
 ```
 
 Créditos na categoria "Investimentos" vêm da venda de um ativo. Contam como caixa, mas não como renda, para não inflar a taxa de poupança do ano em que caem.

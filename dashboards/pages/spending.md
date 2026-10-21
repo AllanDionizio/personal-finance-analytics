@@ -212,7 +212,7 @@ select
     sum(fixed_spending) / sum(spending) as fixed_share
 from warehouse.monthly_cashflow
 group by budget_year
-order by budget_year
+order by budget_year desc
 ```
 
 <DataTable data={fixed_share}>

@@ -3,7 +3,8 @@
 -- inflation over the same periods, so "did we beat inflation?" compares like
 -- with like.
 --
--- External flows are the recorded investment contributions only. In the
+-- External flows are the recorded investment contributions only, whatever
+-- their OK column says (the sheets leave them at 'Não'). In the
 -- workbooks a maturing asset is reinvested inside the portfolio and books
 -- nothing; a withdrawal to spend isn't recorded either, which understates
 -- that period's return (it never overstates it). Dividends are paid into the
@@ -57,8 +58,10 @@ flows as (
     from periods
     left join {{ ref('fct_transactions') }} as facts
         on
-            facts.is_settled
-            and (facts.is_investment_contribution or facts.is_dividend)
+            (
+                facts.is_investment_contribution
+                or (facts.is_dividend and facts.is_settled)
+            )
             and coalesce(
                 facts.transaction_date, facts.budget_month + 14
             ) > periods.previous_date
@@ -94,19 +97,28 @@ inflation as (
 
 spending as (
 
-    -- The 12 closed months up to the snapshot's month.
+    -- The last 12 closed months up to the snapshot's month. A snapshot taken
+    -- in the current month, which isn't closed yet, uses the 12 before it.
     select
-        periods.reference_date,
+        reference_date,
         count(*) as months,
-        avg(cashflow.spending) as avg_monthly_spending,
-        avg(cashflow.fixed_spending) as avg_monthly_fixed_spending
-    from periods
-    inner join {{ ref('fct_monthly_cashflow') }} as cashflow
-        on
-            cashflow.budget_month <= date_trunc('month', periods.reference_date)
-            and cashflow.budget_month
-            > date_trunc('month', periods.reference_date) - interval 12 month
-    group by periods.reference_date
+        avg(spending) as avg_monthly_spending,
+        avg(fixed_spending) as avg_monthly_fixed_spending
+    from (
+        select
+            periods.reference_date,
+            cashflow.spending,
+            cashflow.fixed_spending,
+            row_number() over (
+                partition by periods.reference_date
+                order by cashflow.budget_month desc
+            ) as month_rank
+        from periods
+        inner join {{ ref('fct_monthly_cashflow') }} as cashflow
+            on cashflow.budget_month <= date_trunc('month', periods.reference_date)
+    )
+    where month_rank <= 12
+    group by reference_date
 
 ),
 

@@ -201,7 +201,7 @@ select
 from warehouse.monthly_cashflow as m
 inner join ${years} as y on m.budget_year = y.year
 group by y.year_label, y.closed_months
-order by y.year_label
+order by y.year_label desc
 ```
 
 <DataTable data={yearly}>
@@ -225,7 +225,7 @@ select
     effective_amount as amount
 from ${closed_credits}
 where not is_operating
-order by budget_month
+order by budget_month desc
 ```
 
 Credits in the "Investimentos" category come from selling an asset (here, a car sold in installments). They count as cash, but not as income, so they don't inflate the savings rate of the year they land in.

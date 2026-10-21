@@ -419,9 +419,9 @@ them up the same way:
 
 `fct_net_worth` has one row per snapshot:
 
-- **External flows**: the settled investment contributions dated after the
-  previous snapshot, up to this one (a row without a date counts at
-  mid-month). The workbooks record contributions only: a maturing asset is
+- **External flows**: the investment contributions dated after the
+  previous snapshot, up to this one, whatever their status (the sheets
+  leave them at `'Não'`; a row without a date counts at mid-month). The workbooks record contributions only: a maturing asset is
   reinvested inside the portfolio and books nothing, and a withdrawal to
   spend isn't recorded, which understates that period's return.
 - **Return of a period** (modified Dietz): `(value − previous value −
@@ -433,8 +433,9 @@ them up the same way:
   `real = (1 + return) / (1 + inflation) − 1`. NULL while a month isn't
   published or there are fewer than 12 periods.
 - **Liquid reserve**: the cash balance plus fixed income with no maturity
-  date (daily liquidity), in months of the average fixed spending of the 12
-  closed months up to the snapshot's month. The target band is 6 to 12
+  date (daily liquidity), in months of the average fixed spending of the
+  last 12 closed months up to the snapshot's month (a snapshot in the
+  current, open month uses the 12 before it). The target band is 6 to 12
   months (vars `reserve_min_months`, `reserve_max_months`).
 - **Runway**: the whole portfolio in months of average spending.
 

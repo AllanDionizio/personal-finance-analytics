@@ -126,7 +126,7 @@ select
 from warehouse.net_worth
 where return_ytd is not null
 qualify reference_date = max(reference_date) over (partition by year(reference_date))
-order by reference_date
+order by reference_date desc
 ```
 
 ```sql by_year_long

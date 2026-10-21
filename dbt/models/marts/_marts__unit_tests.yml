@@ -78,12 +78,15 @@ unit_tests:
 
   - name: test_net_worth_returns_flows_and_reserve
     description: >
-      Three snapshots. The February period has a 1,000 contribution and a 50 dividend: gain
-      10,650 - 9,500 - 1,000 + 50 = 200 over 9,500 + 500 = 10,000, a 2% modified Dietz return.
-      March has no flows: 213 over 10,650, 2% again; the contribution dated after the March
-      snapshot belongs to the next period. The reserve (cash plus fixed income with no
-      maturity) needs 12 closed months of spending: February has 11, March has 12, and 1,200
-      of reserve is 12 months of fixed spending, the top of the band.
+      Four snapshots. The February period has a 1,000 contribution, counted although it
+      isn't settled (the sheets leave contributions at 'Não'), and a 50 dividend; the
+      unsettled dividend is left out. Gain 10,650 - 9,500 - 1,000 + 50 = 200 over
+      9,500 + 500 = 10,000, a 2% modified Dietz return. March has no flows: 213 over 10,650,
+      2% again; the contribution dated after the March snapshot belongs to April, which
+      gains nothing. The reserve (cash plus fixed income with no maturity) needs 12 closed
+      months of spending: February has 11, March has 12, and 1,200 of reserve is 12 months
+      of fixed spending, the top of the band. April isn't closed, so its snapshot uses the
+      12 months through March.
     model: fct_net_worth
     given:
       - input: ref('fct_portfolio_snapshots')
@@ -95,11 +98,14 @@ unit_tests:
           - {reference_date: "2026-03-20", asset_class: "Cash", gross_value: 1000, maturity_date: null}
           - {reference_date: "2026-03-20", asset_class: "Fixed income", gross_value: 200, maturity_date: null}
           - {reference_date: "2026-03-20", asset_class: "Fixed income", gross_value: 9663, maturity_date: "2030-01-01"}
+          - {reference_date: "2026-04-10", asset_class: "Cash", gross_value: 1000, maturity_date: null}
+          - {reference_date: "2026-04-10", asset_class: "Fixed income", gross_value: 200, maturity_date: null}
+          - {reference_date: "2026-04-10", asset_class: "Fixed income", gross_value: 10363, maturity_date: "2030-01-01"}
       - input: ref('fct_transactions')
         rows:
-          - {transaction_date: "2026-02-10", budget_month: "2026-02-01", amount: 1000, is_settled: true, is_investment_contribution: true, is_dividend: false}
+          - {transaction_date: "2026-02-10", budget_month: "2026-02-01", amount: 1000, is_settled: false, is_investment_contribution: true, is_dividend: false}
           - {transaction_date: "2026-02-15", budget_month: "2026-02-01", amount: 50, is_settled: true, is_investment_contribution: false, is_dividend: true}
-          - {transaction_date: "2026-02-18", budget_month: "2026-02-01", amount: 300, is_settled: false, is_investment_contribution: true, is_dividend: false}
+          - {transaction_date: "2026-02-18", budget_month: "2026-02-01", amount: 300, is_settled: false, is_investment_contribution: false, is_dividend: true}
           - {transaction_date: "2026-03-25", budget_month: "2026-03-01", amount: 700, is_settled: true, is_investment_contribution: true, is_dividend: false}
       - input: ref('fct_inflation_monthly')
         rows:
@@ -125,3 +131,4 @@ unit_tests:
         - {reference_date: "2026-01-20", total_value: 9500, liquid_reserve: 500, contributions: null, dividends: null, period_return: null, reserve_months: null, runway_months: null, reserve_status: null}
         - {reference_date: "2026-02-20", total_value: 10650, liquid_reserve: 1150, contributions: 1000, dividends: 50, period_return: 0.02, reserve_months: null, runway_months: null, reserve_status: null}
         - {reference_date: "2026-03-20", total_value: 10863, liquid_reserve: 1200, contributions: 0, dividends: 0, period_return: 0.02, reserve_months: 12, runway_months: 54.315, reserve_status: "Within target"}
+        - {reference_date: "2026-04-10", total_value: 11563, liquid_reserve: 1200, contributions: 700, dividends: 0, period_return: 0, reserve_months: 12, runway_months: 57.815, reserve_status: "Within target"}
