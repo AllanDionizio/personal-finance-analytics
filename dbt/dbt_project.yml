@@ -11,7 +11,7 @@ macro-paths: ["macros"]
 clean-targets: ["target", "dbt_packages"]
 
 vars:
-  # Liquid reserve target, in months of fixed spending (fct_net_worth)
+  # Liquid reserve target, in months of spending (fct_net_worth, fct_goals)
   reserve_min_months: 6
   reserve_max_months: 12
   # Where the portfolio's new money comes from (fct_monthly_cashflow.new_money).
@@ -19,6 +19,21 @@ vars:
   # workbooks. 'savings': the investment rows also book money reinvested from
   # redemptions, so new money is the month's savings plus asset sales.
   new_money_source: "{{ env_var('NEW_MONEY_SOURCE', 'contributions') }}"
+  # Goals (fct_goals, fct_goal_tracking). The defaults suit the synthetic
+  # household; make real reads the real ones from .env.real.
+  # Financial independence: the month to reach it, the monthly cost of living
+  # to cover in today's money ('' = the last 12 months' average spending), the
+  # yearly withdrawal rate that defines the target, and the yearly return
+  # above inflation the projections assume.
+  fi_target_month: "{{ env_var('FI_TARGET_MONTH', '2050-01-01') }}"
+  fi_monthly_spending: "{{ env_var('FI_MONTHLY_SPENDING', '') }}"
+  fi_withdrawal_rate: 0.04
+  fi_real_return: 0.045
+  # New money per month: the goal from a month on, raised every 12 months by
+  # a step, up to what independence needs.
+  new_money_goal_from: "{{ env_var('NEW_MONEY_GOAL_FROM', '2026-01-01') }}"
+  new_money_goal_start: "{{ env_var('NEW_MONEY_GOAL_START', '2500') }}"
+  new_money_goal_step: "{{ env_var('NEW_MONEY_GOAL_STEP', '500') }}"
 
 models:
   personal_finance:

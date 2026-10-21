@@ -52,6 +52,8 @@ Star schema built by dbt in three layers: staging cleans and types the raw table
 | `fct_monthly_cashflow` | Fact | One row per closed budget month | Operating income, dividends, one-off income, spending (fixed / variable), investments and savings; the dashboard's metrics, defined once |
 | `fct_net_worth` | Fact | One row per portfolio snapshot | Value, contributions, modified Dietz return and inflation over the same periods (12 months and year to date), liquid reserve against its target |
 | `fct_inflation_monthly` | Fact | One row per month | Official inflation (IPCA) with its price index, 12-month and year-to-date rates |
+| `fct_goals` | Fact | One row | The household against its goals: financial independence (target, new money it needs, when the current pace gets there), new money and liquid reserve |
+| `fct_goal_tracking` | Fact | One row per month to the independence target | Value in today's money, new money against its goal, and the projections to the target |
 | `dim_date` | Dimension | One row per day | Generated calendar |
 | `dim_category` | Dimension | One row per category | Category, macro-category (fixed / variable), type |
 | `dim_owner` | Dimension | One row per owner | Derived from cell colors |
@@ -84,6 +86,7 @@ Five Evidence pages (`dashboards/`) over the marts, built as a static site. They
 | Spending | Where does it go, and what changed? | Real spending growth; the categories that moved most in a year; spending against income and inflation, indexed; fixed against variable costs |
 | Installments | How much of the future is committed? | Amount still owed, in months of income; what falls due each month, past the newest workbook; open purchases |
 | Portfolio | Does it grow from contributions or returns, and does it beat inflation? | Value against invested capital; return against IPCA by year and over rolling 12 months; liquid reserve against its 6–12 month band; maturity ladder; concentration; dividends |
+| Goals | How far is financial independence, and what does it take? | Target, progress and the monthly new money it needs; the path to it against the current pace; new money against a goal that rises every year; liquid reserve against its target |
 
 The metrics live in dbt (`fct_monthly_cashflow`, `fct_net_worth`, `fct_inflation_monthly`), where they are tested and documented; Evidence only reads the marts and filters them. A month counts once it is closed, so the month still being paid doesn't drag the totals down.
 
@@ -131,7 +134,7 @@ No credentials or real data needed. The ingestion is idempotent: re-running on t
 
 ### Personal mode: real workbooks, in Portuguese
 
-The same code runs on the real workbooks, on one machine only. The XLSX files go in `data/raw/` and the warehouse in `data/real.duckdb`; both are gitignored. An optional `.env.real` file (copy `.env.real.example`) maps the placeholders (Person A, Card B) to the labels the dashboard should show.
+The same code runs on the real workbooks, on one machine only. The XLSX files go in `data/raw/` and the warehouse in `data/real.duckdb`; both are gitignored. An optional `.env.real` file (copy `.env.real.example`) maps the placeholders (Person A, Card B) to the labels the dashboard should show and holds the household's own goals.
 
 ```bash
 make real            # data/raw → data/real.duckdb, dbt build with .env.real, new money from savings

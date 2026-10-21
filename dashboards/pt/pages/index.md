@@ -81,7 +81,7 @@ Nos 12 meses até **{kpis[0]?.through_month}**, a casa recebeu **{fmt(kpis[0]?.i
 
 A carteira vale **{fmt(worth[0]?.total_value, 'brl0')}**, {fmt(Math.abs(worth[0]?.value_change_1y), 'pct1')} {worth[0]?.value_change_1y >= 0 ? 'a mais' : 'a menos'} que um ano antes. Nos 12 meses até {real_return[0]?.through_month}, rendeu {fmt(real_return[0]?.return_12m, 'pct1')} contra {fmt(real_return[0]?.inflation_12m, 'pct1')} de inflação (IPCA): {#if real_return[0]?.real_return_12m >= 0}um ganho real de **{fmt(real_return[0]?.real_return_12m, 'pct1')}**{:else}uma **perda** real de {fmt(Math.abs(real_return[0]?.real_return_12m), 'pct1')}{/if}.
 
-A reserva de liquidez cobre **{fmt(worth[0]?.reserve_months, 'num1')} meses** de custos fixos ({worth[0]?.reserve_status?.toLowerCase()}: 6 a 12 meses). As parcelas ainda a pagar somam **{fmt(owed[0]?.owed, 'brl0')}**, cerca de {fmt(owed[0]?.months_of_income, 'num1')} meses de renda.
+A reserva de liquidez cobre **{fmt(worth[0]?.reserve_months, 'num1')} meses** de gastos ({worth[0]?.reserve_status?.toLowerCase()}: 6 a 12 meses). As parcelas ainda a pagar somam **{fmt(owed[0]?.owed, 'brl0')}**, cerca de {fmt(owed[0]?.months_of_income, 'num1')} meses de renda.
 
 </div>
 
@@ -130,7 +130,7 @@ A reserva de liquidez cobre **{fmt(worth[0]?.reserve_months, 'num1')} meses** de
 <BigValue
     data={worth}
     value=reserve_months
-    title="Reserva, meses de custos fixos"
+    title="Reserva, meses de gastos"
     fmt=num1
     sparkline=snapshot_at
     link="/carteira"
@@ -178,6 +178,7 @@ Renda menos gastos, mês a mês. O superávit é o dinheiro novo que entra na [c
 - **[Gastos](/gastos)** Para onde ele vai, o que mudou no último ano e se os gastos crescem mais que a renda e a inflação
 - **[Parcelas](/parcelas)** Quanto do futuro já está comprometido
 - **[Carteira](/carteira)** Se a carteira cresce por dinheiro novo ou por rendimento, e se ganha da inflação
+- **[Metas](/metas)** A que distância está a independência financeira, e quanto ela pede por mês
 
 </div>
 

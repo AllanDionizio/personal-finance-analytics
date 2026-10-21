@@ -495,12 +495,12 @@ models:
           spending.
       - name: reserve_months
         description: >
-          liquid_reserve / avg_monthly_fixed_spending: how many months the reserve would pay for
-          fixed costs.
+          liquid_reserve / avg_monthly_spending: how many months the reserve would pay for all
+          spending.
       - name: reserve_status
         description: >
           'Below target', 'Within target' or 'Above target' against the project vars
-          reserve_min_months and reserve_max_months (6 and 12 months of fixed spending).
+          reserve_min_months and reserve_max_months (6 and 12 months of spending).
         data_tests:
           - accepted_values:
               arguments:
@@ -564,3 +564,95 @@ models:
         description: '{{ doc("return_to_date") }}'
       - name: return_at_maturity
         description: '{{ doc("return_at_maturity") }}'
+
+  - name: fct_goals
+    description: >
+      One row: where the household stands against its goals at the newest portfolio
+      snapshot. Financial independence (the target, the monthly new money it needs by the
+      target month, and when the current pace gets there), the new money goal of the current
+      month, and the liquid reserve goal. Amounts are in today's money; the goal settings are
+      project vars (fi_*, new_money_goal_*, reserve_min_months).
+    data_tests:
+      - dbt_expectations.expect_table_row_count_to_equal:
+          arguments:
+            value: 1
+    columns:
+      - name: as_of_date
+        description: The newest snapshot's reference date.
+        data_tests:
+          - not_null
+      - name: projection_from
+        description: The month the projections start from, the newest snapshot's.
+      - name: wealth
+        description: The portfolio's value at the newest snapshot.
+      - name: fi_monthly_spending
+        description: >
+          The monthly cost of living independence has to cover: var fi_monthly_spending, or the
+          last 12 closed months' average spending.
+      - name: fi_withdrawal_rate
+        description: Yearly share of the portfolio that can be spent for good (var).
+      - name: fi_real_return
+        description: Yearly return above inflation the projections assume (var).
+      - name: monthly_return
+        description: fi_real_return as a monthly rate.
+      - name: fi_target_value
+        description: fi_monthly_spending * 12 / fi_withdrawal_rate.
+        data_tests:
+          - not_null
+      - name: fi_progress
+        description: wealth / fi_target_value.
+      - name: fi_target_month
+        description: The month independence should be reached (var fi_target_month).
+      - name: months_to_target
+        description: Months from projection_from to fi_target_month.
+      - name: required_monthly_new_money
+        description: >
+          New money a month, in today's money, that takes wealth to fi_target_value by
+          fi_target_month; 0 when the return alone gets there, NULL once the month has passed.
+      - name: current_monthly_new_money
+        description: Average new_money of the last 12 closed months.
+      - name: projected_fi_month
+        description: >
+          When the portfolio reaches fi_target_value at the current pace; NULL when it doesn't
+          within a century.
+      - name: new_money_goal
+        description: >
+          The current month's new money goal: none before new_money_goal_from, then
+          new_money_goal_start raised by new_money_goal_step every 12 months, never above
+          required_monthly_new_money.
+      - name: reserve
+        description: The liquid reserve at the newest snapshot (fct_net_worth.liquid_reserve).
+      - name: reserve_target
+        description: reserve_min_months times the average monthly spending.
+        data_tests:
+          - not_null
+      - name: reserve_progress
+        description: reserve / reserve_target.
+
+  - name: fct_goal_tracking
+    description: >
+      One row per month, from the first portfolio snapshot to the independence target month:
+      the portfolio in today's money, new money against its goal, and two projections from
+      the newest snapshot, at the pace independence needs and at the current pace.
+    columns:
+      - name: month
+        description: First day of the month.
+        data_tests:
+          - unique
+          - not_null
+      - name: wealth_today_money
+        description: >
+          The month's last snapshot value at today's prices (price index of today over the
+          month's); NULL for a month without a snapshot.
+      - name: new_money
+        description: fct_monthly_cashflow.new_money; NULL outside the closed months.
+      - name: new_money_goal
+        description: The month's new money goal (see fct_goals.new_money_goal).
+      - name: fi_target_value
+        description: The independence target, the same every month.
+      - name: required_path
+        description: >
+          From the newest snapshot's month on, the value the portfolio reaches with
+          required_monthly_new_money a month; it ends on fi_target_value.
+      - name: current_pace_path
+        description: The same projection with current_monthly_new_money.

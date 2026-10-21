@@ -58,7 +58,7 @@ order by reference_date desc
 <BigValue
     data={worth}
     value=reserve_months
-    title="Liquid reserve, months of fixed costs"
+    title="Liquid reserve, months of spending"
     fmt=num1
 />
 
@@ -197,12 +197,12 @@ order by reference_date
     y=reserve_months
     yFmt=num0
     xFmt="mmm yyyy"
-    title="Months of fixed costs the reserve covers"
+    title="Months of spending the reserve covers"
 >
     <ReferenceArea yMin=6 yMax=12 label="Target: 6 to 12 months" color=positive opacity=0.35 />
 </LineChart>
 
-The reserve is the cash balance plus fixed income with no maturity date (daily liquidity), divided by the average monthly fixed costs of the last 12 months: how long it would cover the bills that come every month. Below 6 months it is thin; above 12, money is sitting idle that could earn more elsewhere.
+The reserve is the cash balance plus fixed income with no maturity date (daily liquidity), divided by the average monthly spending of the last 12 months: how long it would keep the household going, all spending included, if income stopped. Below 6 months it is thin; above 12, money is sitting idle that could earn more elsewhere.
 
 ## By asset class
 

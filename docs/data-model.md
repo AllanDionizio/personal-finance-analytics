@@ -184,6 +184,8 @@ on debits and `payment_method_key` on credits, which a test enforces.
 | `fct_monthly_cashflow` | one row per closed budget month (6.10) | `budget_month`, `income` (operating), `non_operating_income`, `dividends`, `spending`, `fixed_spending`, `variable_spending`, `unclassified_spending`, `invested`, `savings` (`income − spending`), `new_money` |
 | `fct_net_worth` | one row per portfolio snapshot (6.11) | `reference_date`, `total_value`, `liquid_reserve`, `contributions`, `dividends`, `period_return`, `period_inflation`, `return_12m`, `inflation_12m`, `real_return_12m`, the same year to date, `runway_months`, `reserve_months`, `reserve_status` |
 | `fct_inflation_monthly` | one row per month (6.12) | `month`, `ipca_pct`, `ipca_rate`, `price_index`, `ipca_12m`, `ipca_ytd` |
+| `fct_goals` | one row (6.13) | `as_of_date`, `wealth`, `fi_target_value`, `fi_progress`, `fi_target_month`, `required_monthly_new_money`, `current_monthly_new_money`, `projected_fi_month`, `new_money_goal`, `reserve`, `reserve_target`, `reserve_progress` |
+| `fct_goal_tracking` | one row per month, first snapshot to the target month (6.13) | `month`, `wealth_today_money`, `new_money`, `new_money_goal`, `fi_target_value`, `required_path`, `current_pace_path` |
 | `fct_portfolio_snapshots` | one row per asset per reference date | `snapshot_id` (`hash(reference_date\|bank\|asset\|maturity_date)`), `reference_date`, `bank`, `asset`, `asset_class` (`'Real estate fund'` / `'Fixed income'` / `'Multimarket fund'` / `'Crypto'` / `'Cash'` / `'Other'`), `gross_value`, `allocation_pct`, `maturity_date`, `mom`, `yoy` |
 
 ## 5. Source → model mapping
@@ -447,7 +449,7 @@ them up the same way:
   `real = (1 + return) / (1 + inflation) − 1`. NULL while a month isn't
   published or there are fewer than 12 periods.
 - **Liquid reserve**: the cash balance plus fixed income with no maturity
-  date (daily liquidity), in months of the average fixed spending of the
+  date (daily liquidity), in months of the average spending of the
   last 12 closed months up to the snapshot's month (a snapshot in the
   current, open month uses the 12 before it). The target band is 6 to 12
   months (vars `reserve_min_months`, `reserve_max_months`).
@@ -459,6 +461,30 @@ Seed `ipca_monthly` holds the official IPCA, monthly, from the Central
 Bank's public API (SGS series 433), refreshed by hand.
 `fct_inflation_monthly` adds the price index (100 before the first month)
 and the 12-month and year-to-date rates, compounded from the monthly ones.
+
+### 6.13 Goals
+
+The goal settings are project vars; the defaults suit the synthetic
+household, and `make real` reads the real ones from `.env.real`.
+
+- **Financial independence**: the portfolio pays the cost of living for
+  good when a yearly withdrawal of `fi_withdrawal_rate` (4%) covers it, so
+  the target is `fi_monthly_spending × 12 / fi_withdrawal_rate`. Without
+  `fi_monthly_spending`, the cost of living is the last 12 closed months'
+  average spending.
+- **Projections**: from the newest snapshot, the portfolio grows by
+  `fi_real_return` (4.5%) a year above inflation, so every amount is in
+  today's money. The required monthly new money is the annuity that takes
+  today's value to the target by `fi_target_month`; the current pace is the
+  last 12 closed months' average `new_money`, and the projected month is
+  when that pace reaches the target (NULL beyond a century).
+- **Past values** in `fct_goal_tracking` are brought to today's prices with
+  the month's price index; a month the IPCA seed doesn't reach yet takes the
+  newest index.
+- **New money goal**: from `new_money_goal_from`, `new_money_goal_start` a
+  month, raised by `new_money_goal_step` every 12 months, never above the
+  required monthly new money (macro `new_money_goal`).
+- **Reserve goal**: `reserve_min_months` of the average monthly spending.
 
 ## 7. Decisions
 
@@ -476,7 +502,8 @@ and the 12-month and year-to-date rates, compounded from the monthly ones.
 12. **Dashboard metrics** → defined in `fct_monthly_cashflow`, over closed months only; Evidence only selects and filters
 13. **Money from selling an asset** → non-operating income, outside income and the savings rate
 14. **Portfolio return** → modified Dietz, with new money as the only external flow (the recorded contributions, or the savings where contributions also book reinvestments), dividends as return; compared with IPCA over the same periods
-15. **Liquid reserve** → cash plus fixed income with no maturity; target 6 to 12 months of fixed spending
+15. **Liquid reserve** → cash plus fixed income with no maturity; target 6 to 12 months of all spending, the household's whole cost of living rather than the bills alone
+16. **Goals** → settings as dbt vars (synthetic defaults, real values from a gitignored file); independence at a 4% withdrawal rate, projected at 4.5% a year above inflation, in today's money
 
 ## 8. Bugs found with the synthetic data (fixed)
 

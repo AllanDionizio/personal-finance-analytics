@@ -21,7 +21,7 @@
 -- inflation are then chained over the last 12 periods and over the year.
 --
 -- The liquid reserve is the cash balance plus fixed income with no maturity
--- date (daily liquidity), measured in months of fixed spending against the
+-- date (daily liquidity), measured in months of all spending against the
 -- target band in the project vars reserve_min_months / reserve_max_months.
 
 
@@ -282,14 +282,14 @@ select
     avg_monthly_spending,
     avg_monthly_fixed_spending,
     total_value / nullif(avg_monthly_spending, 0) as runway_months,
-    liquid_reserve / nullif(avg_monthly_fixed_spending, 0) as reserve_months,
+    liquid_reserve / nullif(avg_monthly_spending, 0) as reserve_months,
     case
-        when avg_monthly_fixed_spending is null then null
+        when avg_monthly_spending is null then null
         when
-            liquid_reserve / nullif(avg_monthly_fixed_spending, 0)
+            liquid_reserve / nullif(avg_monthly_spending, 0)
             < {{ var('reserve_min_months') }} then 'Below target'
         when
-            liquid_reserve / nullif(avg_monthly_fixed_spending, 0)
+            liquid_reserve / nullif(avg_monthly_spending, 0)
             > {{ var('reserve_max_months') }} then 'Above target'
         else 'Within target'
     end as reserve_status
