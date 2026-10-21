@@ -285,7 +285,8 @@ models:
         description: True if the installment is in the workbooks.
       - name: is_settled
         description: >
-          True before the as-of month (the newest month with a settled transaction): past
+          True before the as-of month (the newest month with a settled transaction, capped at
+          the current month): past
           installments are always paid. From then on, the sheet's status for a recorded installment,
           and false for one past the newest workbook.
     data_tests:
@@ -303,7 +304,8 @@ models:
   - name: fct_monthly_cashflow
     description: >
       One row per closed budget month (every month before the as-of month, the newest one with
-      a settled transaction): income, spending and savings, defined once for the dashboard.
+      a settled transaction, capped at the current month): income, spending and savings,
+      defined once for the dashboard.
     columns:
       - name: budget_month
         description: '{{ doc("budget_month") }}'
@@ -346,7 +348,9 @@ models:
           The part of spending in categories with neither macro-category (Unknown or blank);
           0 when every category is classified.
       - name: invested
-        description: Settled debits into investments, the money left out of spending.
+        description: >
+          Debits into investments, whatever their status (the sheets leave them at 'Não'): the
+          money left out of spending.
       - name: savings
         description: income - spending, i.e. what was invested plus what stayed in the account.
     data_tests:

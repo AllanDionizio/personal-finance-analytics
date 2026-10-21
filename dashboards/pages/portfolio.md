@@ -199,7 +199,7 @@ order by reference_date
     xFmt="mmm yyyy"
     title="Months of fixed costs the reserve covers"
 >
-    <ReferenceArea yMin=6 yMax=12 label="Target: 6 to 12 months" color=positive opacity=0.15 />
+    <ReferenceArea yMin=6 yMax=12 label="Target: 6 to 12 months" color=positive opacity=0.35 />
 </LineChart>
 
 The reserve is the cash balance plus fixed income with no maturity date (daily liquidity), divided by the average monthly fixed costs of the last 12 months: how long it would cover the bills that come every month. Below 6 months it is thin; above 12, money is sitting idle that could earn more elsewhere.

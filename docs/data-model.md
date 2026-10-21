@@ -384,7 +384,8 @@ is no workbook before 2021 or after the newest year. So a purchase from late
 - **Schedule**: `fct_installments` lays out installments 1 to N of each
   purchase.
 - **Settled**: every installment before the as-of month (the newest month
-  with a settled transaction) is paid. In the sheets a past installment is
+  with a settled transaction, capped at the current month, since the sheets
+  also mark future rows as settled) is paid. In the sheets a past installment is
   always paid, so a leftover `'Não'` is a typing slip, and installments
   before 2021 are in no workbook. From the as-of month on, a recorded
   installment keeps the sheet's status, and one past the newest workbook is
@@ -409,7 +410,9 @@ them up the same way:
 - **Fixed / variable / unclassified**: spending split by the category's
   macro-category; unclassified covers `'Unknown'` and blanks. The three add
   up to spending (tested).
-- **Invested**: settled investment contributions. **Savings**: income −
+- **Invested**: every investment contribution, whatever its status: the
+  sheets leave them at `'Não'` so the workbook's own report doesn't count
+  them as spending. **Savings**: income −
   spending, i.e. what was invested plus what stayed in the account.
 
 ### 6.11 Portfolio return and liquid reserve

@@ -59,9 +59,10 @@ monthly as (
         sum(effective_amount) filter (
             where side = 'debit' and coalesce(macro_category, '') not in ('Fixed', 'Variable')
         ) as unclassified_spending,
-        sum(amount) filter (
-            where is_investment_contribution and is_settled
-        ) as invested
+        -- Every contribution, whatever its OK column says: the sheets leave
+        -- them at 'Não' so the workbook's own report doesn't count them as
+        -- spending.
+        sum(amount) filter (where is_investment_contribution) as invested
     from transactions
     group by budget_month
 

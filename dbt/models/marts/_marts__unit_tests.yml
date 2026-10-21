@@ -37,14 +37,20 @@ unit_tests:
 
   - name: test_monthly_cashflow_counts_closed_months_only
     description: >
-      The as-of month is March 2026, so only January and February are closed. The investment
-      contribution is not spending, the unpaid March bill is left out with its month, and the
-      asset sale is cash in but not income.
+      Today is March 2026, so only January and February are closed, even though a June
+      row is already marked settled (a card installment on a future bill). The investment
+      contributions are not spending, and both count as invested, the one left at 'Não'
+      too. The unpaid March bill is left out with its month, and the asset sale is cash in
+      but not income.
     model: fct_monthly_cashflow
+    overrides:
+      vars:
+        as_of_date: "2026-03-10"
     given:
       - input: ref('stg_transactions')
         rows:
           - {budget_month: "2026-03-01", is_settled: true}
+          - {budget_month: "2026-06-01", is_settled: true}
       - input: ref('fct_transactions')
         rows:
           - {budget_month: "2026-01-01", side: "credit", category_key: "inc", amount: 1000, effective_amount: 1000, is_settled: true, is_investment_contribution: false, is_dividend: false}
@@ -52,6 +58,7 @@ unit_tests:
           - {budget_month: "2026-02-01", side: "credit", category_key: "sale", amount: 5000, effective_amount: 5000, is_settled: true, is_investment_contribution: false, is_dividend: false}
           - {budget_month: "2026-01-01", side: "debit", category_key: "fix", amount: 300, effective_amount: 300, is_settled: true, is_investment_contribution: false}
           - {budget_month: "2026-01-01", side: "debit", category_key: "inv", amount: 200, effective_amount: 0, is_settled: true, is_investment_contribution: true}
+          - {budget_month: "2026-02-01", side: "debit", category_key: "inv", amount: 100, effective_amount: 0, is_settled: false, is_investment_contribution: true}
           - {budget_month: "2026-02-01", side: "debit", category_key: "var", amount: 50, effective_amount: 50, is_settled: true, is_investment_contribution: false}
           - {budget_month: "2026-02-01", side: "debit", category_key: "unknown", amount: 10, effective_amount: 10, is_settled: true, is_investment_contribution: false}
           - {budget_month: "2026-03-01", side: "debit", category_key: "fix", amount: 300, effective_amount: 0, is_settled: false, is_investment_contribution: false}
@@ -67,7 +74,7 @@ unit_tests:
     expect:
       rows:
         - {budget_month: "2026-01-01", income: 1040, non_operating_income: 0, dividends: 40, spending: 300, fixed_spending: 300, variable_spending: 0, unclassified_spending: 0, invested: 200, savings: 740}
-        - {budget_month: "2026-02-01", income: 0, non_operating_income: 5000, dividends: 0, spending: 60, fixed_spending: 0, variable_spending: 50, unclassified_spending: 10, invested: 0, savings: -60}
+        - {budget_month: "2026-02-01", income: 0, non_operating_income: 5000, dividends: 0, spending: 60, fixed_spending: 0, variable_spending: 50, unclassified_spending: 10, invested: 100, savings: -60}
 
   - name: test_net_worth_returns_flows_and_reserve
     description: >
