@@ -1,5 +1,5 @@
 .PHONY: setup data deps build test docs lint all dashboard dashboard-dev site \
-	dashboard-pt dashboard-dev-pt real real-dashboard
+	dashboard-pt dashboard-dev-pt real real-dashboard real-context
 
 export DBT_PROFILES_DIR := $(CURDIR)/dbt
 # Evidence sends anonymous usage stats unless told not to
@@ -79,6 +79,11 @@ real: deps
 
 real-dashboard:
 	$(MAKE) dashboard-dev-pt WAREHOUSE=real.duckdb
+
+# A Markdown summary of the real finances, for a chat assistant's context
+real-context:
+	python -m reports.household_context --db $(REAL_DB) \
+		--profile data/personal/perfil.md --out data/personal/contexto.md
 
 # From a fresh clone to a built warehouse and dashboard
 all: data build dashboard

@@ -60,6 +60,9 @@ jobs:
         working-directory: dbt
         run: dbt build
 
+      - name: Household context report (smoke test on the synthetic marts)
+        run: python -m reports.household_context --db data/warehouse.duckdb --out /tmp/context.md
+
       - name: dbt source freshness
         working-directory: dbt
         run: dbt source freshness

@@ -20,10 +20,10 @@
 -- capital, with contributions counted for half the period. Returns and
 -- inflation are then chained over the last 12 periods and over the year.
 --
--- The liquid reserve is the cash balance plus fixed income with no maturity
--- date (daily liquidity), measured in months of all spending against the
--- target band in the project vars reserve_min_months / reserve_max_months.
-
+-- The liquid reserve is every holding with daily liquidity
+-- (fct_portfolio_snapshots.is_liquid), measured in months of all spending
+-- against the target band in the project vars reserve_min_months /
+-- reserve_max_months.
 
 with
 
@@ -32,10 +32,7 @@ snapshots as (
     select
         reference_date,
         sum(gross_value) as total_value,
-        coalesce(sum(gross_value) filter (
-            where asset_class = 'Cash'
-            or (asset_class = 'Fixed income' and maturity_date is null)
-        ), 0) as liquid_reserve
+        coalesce(sum(gross_value) filter (where is_liquid), 0) as liquid_reserve
     from {{ ref('fct_portfolio_snapshots') }}
     group by reference_date
 

@@ -202,7 +202,7 @@ order by reference_date
     <ReferenceArea yMin=6 yMax=12 label="Target: 6 to 12 months" color=positive opacity=0.35 />
 </LineChart>
 
-The reserve is the cash balance plus fixed income with no maturity date (daily liquidity), divided by the average monthly spending of the last 12 months: how long it would keep the household going, all spending included, if income stopped. Below 6 months it is thin; above 12, money is sitting idle that could earn more elsewhere.
+The reserve is every holding that can be withdrawn the same day (listed on [Goals](/goals)), divided by the average monthly spending of the last 12 months: how long it would keep the household going, all spending included, if income stopped. Below 6 months it is thin; above 12, money is sitting idle that could earn more elsewhere.
 
 ## By asset class
 

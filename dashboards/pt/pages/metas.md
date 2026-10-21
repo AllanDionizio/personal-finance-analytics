@@ -98,4 +98,32 @@ Dinheiro novo é o que entra no patrimônio vindo de fora da carteira, mês a m�
 
 </div>
 
-A meta é de 6 meses do gasto médio da casa, guardados onde dá para sacar no mesmo dia (veja a [Carteira](/carteira)).
+A meta é de 6 meses do gasto médio da casa, guardados onde dá para sacar no mesmo dia sem perder o que foi aplicado.
+
+### De onde sacar
+
+```sql reserve_holdings
+-- Formatado aqui: a tabela mostra uma data NULL como 1969 quando recebe um formato
+select
+    withdrawal_order,
+    bank,
+    asset,
+    gross_value,
+    coalesce(strftime(maturity_date, '%d/%m/%Y'), '') as maturity,
+    coalesce(liquidity_note, '') as note
+from warehouse.portfolio
+where reference_date = (select max(reference_date) from warehouse.portfolio)
+    and withdrawal_order is not null
+order by withdrawal_order
+```
+
+<DataTable data={reserve_holdings} rows=all>
+    <Column id=withdrawal_order title="Ordem" />
+    <Column id=bank title="Banco" />
+    <Column id=asset title="Ativo" />
+    <Column id=gross_value fmt=brl0 title="Valor" contentType=bar barColor={['#dcdafb', '#353094']} />
+    <Column id=maturity title="Vencimento" />
+    <Column id=note title="Observação" wrap=true />
+</DataTable>
+
+Numa emergência, saque nesta ordem: primeiro o saldo em conta, depois o que sai sem custo e, por último, o que perde rendimento se sair antes. Um ativo entra aqui quando é saldo, renda fixa sem vencimento, tem "Liq. Diária" no nome ou está na lista do `.env.real`, que também define a ordem.

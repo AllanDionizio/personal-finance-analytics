@@ -87,4 +87,32 @@ New money is what enters the household's wealth from outside the portfolio, mont
 
 </div>
 
-The target is 6 months of the household's average spending, kept where it can be withdrawn the same day (see [Portfolio](/portfolio)).
+The target is 6 months of the household's average spending, kept where it can be withdrawn the same day without losing what was put in.
+
+### Where to withdraw from
+
+```sql reserve_holdings
+-- Formatted here: the table shows a NULL date as 1969 when given a format
+select
+    withdrawal_order,
+    bank,
+    asset,
+    gross_value,
+    coalesce(strftime(maturity_date, '%d/%m/%Y'), '') as maturity,
+    coalesce(liquidity_note, '') as note
+from warehouse.portfolio
+where reference_date = (select max(reference_date) from warehouse.portfolio)
+    and withdrawal_order is not null
+order by withdrawal_order
+```
+
+<DataTable data={reserve_holdings} rows=all>
+    <Column id=withdrawal_order title="Order" />
+    <Column id=bank />
+    <Column id=asset title="Holding" />
+    <Column id=gross_value fmt=brl0 title="Value" contentType=bar barColor={['#dcdafb', '#353094']} />
+    <Column id=maturity title="Maturity" />
+    <Column id=note wrap=true />
+</DataTable>
+
+In an emergency, withdraw in this order: the cash balance first, then what costs nothing to take out, and last what loses return if taken out early. A holding counts here when it is cash, fixed income with no maturity, has "Liq. Diária" in its name, or is listed in the local settings with its place in the order.

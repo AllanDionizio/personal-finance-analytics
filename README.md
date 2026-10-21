@@ -48,7 +48,7 @@ Star schema built by dbt in three layers: staging cleans and types the raw table
 | --- | --- | --- | --- |
 | `fct_transactions` | Fact | One row per transaction | Credits and debits, with installment and effective-amount flags |
 | `fct_installments` | Fact | One row per installment of every purchase | Full installment plans, including installments outside the workbooks' years; answers how much is still owed |
-| `fct_portfolio_snapshots` | Fact | One row per asset per reference date | Investment portfolio history |
+| `fct_portfolio_snapshots` | Fact | One row per asset per reference date | Investment portfolio history, with each holding's daily liquidity and place in the order to withdraw from |
 | `fct_monthly_cashflow` | Fact | One row per closed budget month | Operating income, dividends, one-off income, spending (fixed / variable), investments and savings; the dashboard's metrics, defined once |
 | `fct_net_worth` | Fact | One row per portfolio snapshot | Value, contributions, modified Dietz return and inflation over the same periods (12 months and year to date), liquid reserve against its target |
 | `fct_inflation_monthly` | Fact | One row per month | Official inflation (IPCA) with its price index, 12-month and year-to-date rates |
@@ -86,7 +86,7 @@ Five Evidence pages (`dashboards/`) over the marts, built as a static site. They
 | Spending | Where does it go, and what changed? | Real spending growth; the categories that moved most in a year; spending against income and inflation, indexed; fixed against variable costs |
 | Installments | How much of the future is committed? | Amount still owed, in months of income; what falls due each month, past the newest workbook; open purchases |
 | Portfolio | Does it grow from contributions or returns, and does it beat inflation? | Value against invested capital; return against IPCA by year and over rolling 12 months; liquid reserve against its 6–12 month band; maturity ladder; concentration; dividends |
-| Goals | How far is financial independence, and what does it take? | Target, progress and the monthly new money it needs; the path to it against the current pace; new money against a goal that rises every year; liquid reserve against its target |
+| Goals | How far is financial independence, and what does it take? | Target, progress and the monthly new money it needs; the path to it against the current pace; new money against a goal that rises every year; liquid reserve against its target, and the holdings to withdraw from, in order |
 
 The metrics live in dbt (`fct_monthly_cashflow`, `fct_net_worth`, `fct_inflation_monthly`), where they are tested and documented; Evidence only reads the marts and filters them. A month counts once it is closed, so the month still being paid doesn't drag the totals down.
 
@@ -139,7 +139,10 @@ The same code runs on the real workbooks, on one machine only. The XLSX files go
 ```bash
 make real            # data/raw → data/real.duckdb, dbt build with .env.real, new money from savings
 make real-dashboard  # the Portuguese dashboard on that warehouse, at 127.0.0.1
+make real-context    # a Markdown summary for a chat assistant, in data/personal/
 ```
+
+`make real-context` writes `data/personal/contexto.md` (gitignored): the goals, the last 12 months, the portfolio and the reserve in the order to withdraw from, after a hand-written profile in `data/personal/perfil.md`. Uploaded to a chat assistant's project, it answers a one-off question (a fund, a CDB) with the household's situation in view.
 
 The Portuguese pages live in `dashboards/pt/`, laid over a copy of the project by `make dashboard-pt` (on the synthetic warehouse by default). They translate the English pages one to one, so a change to a page goes in both. Evidence formats numbers and chart months the Excel way, in English, so separators stay `1,234.5` in either language. Never run `make site` in personal mode: the published site is built from synthetic data only.
 

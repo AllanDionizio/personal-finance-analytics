@@ -212,7 +212,7 @@ order by reference_date
     <ReferenceArea yMin=6 yMax=12 label="Meta: 6 a 12 meses" color=positive opacity=0.35 />
 </LineChart>
 
-A reserva é o saldo em conta mais a renda fixa sem vencimento (liquidez diária), dividido pelo gasto médio mensal dos últimos 12 meses: por quanto tempo ela manteria a casa, com tudo o que ela gasta, se a renda parasse. Abaixo de 6 meses está curta; acima de 12, há dinheiro parado que poderia render mais em outro lugar.
+A reserva é tudo o que dá para sacar no mesmo dia (a lista está em [Metas](/metas)), dividido pelo gasto médio mensal dos últimos 12 meses: por quanto tempo ela manteria a casa, com tudo o que ela gasta, se a renda parasse. Abaixo de 6 meses está curta; acima de 12, há dinheiro parado que poderia render mais em outro lugar.
 
 ## Por classe de ativo
 

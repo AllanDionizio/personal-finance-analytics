@@ -564,6 +564,20 @@ models:
         description: '{{ doc("return_to_date") }}'
       - name: return_at_maturity
         description: '{{ doc("return_at_maturity") }}'
+      - name: is_liquid
+        description: >
+          Daily liquidity, withdrawable the same day without losing what was put in: the cash
+          balance, fixed income with no maturity, a name with "Liq. Diária", or a name in var
+          liquid_assets. These holdings are the liquid reserve.
+        data_tests:
+          - not_null
+      - name: withdrawal_order
+        description: >
+          Where a liquid holding comes in the order to withdraw from, per snapshot: the cash
+          balance first, then var liquid_assets' order, then the largest. NULL when not liquid or
+          empty.
+      - name: liquidity_note
+        description: The note var liquid_assets gives the holding (a penalty, a date to wait for).
 
   - name: fct_goals
     description: >

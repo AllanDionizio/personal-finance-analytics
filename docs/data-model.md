@@ -448,8 +448,10 @@ them up the same way:
   inflation are chained over the last 12 periods and over the year, and
   `real = (1 + return) / (1 + inflation) − 1`. NULL while a month isn't
   published or there are fewer than 12 periods.
-- **Liquid reserve**: the cash balance plus fixed income with no maturity
-  date (daily liquidity), in months of the average spending of the
+- **Liquid reserve**: every holding with daily liquidity
+  (`fct_portfolio_snapshots.is_liquid`: the cash balance, fixed income with
+  no maturity, a name with "Liq. Diária", or a name in var `liquid_assets`,
+  which also sets the order to withdraw from), in months of the average spending of the
   last 12 closed months up to the snapshot's month (a snapshot in the
   current, open month uses the 12 before it). The target band is 6 to 12
   months (vars `reserve_min_months`, `reserve_max_months`).
@@ -502,7 +504,7 @@ household, and `make real` reads the real ones from `.env.real`.
 12. **Dashboard metrics** → defined in `fct_monthly_cashflow`, over closed months only; Evidence only selects and filters
 13. **Money from selling an asset** → non-operating income, outside income and the savings rate
 14. **Portfolio return** → modified Dietz, with new money as the only external flow (the recorded contributions, or the savings where contributions also book reinvestments), dividends as return; compared with IPCA over the same periods
-15. **Liquid reserve** → cash plus fixed income with no maturity; target 6 to 12 months of all spending, the household's whole cost of living rather than the bills alone
+15. **Liquid reserve** → every holding with daily liquidity (cash, fixed income with no maturity, "Liq. Diária", or listed in a local var with its withdrawal order); target 6 to 12 months of all spending, the household's whole cost of living rather than the bills alone
 16. **Goals** → settings as dbt vars (synthetic defaults, real values from a gitignored file); independence at a 4% withdrawal rate, projected at 4.5% a year above inflation, in today's money
 
 ## 8. Bugs found with the synthetic data (fixed)

@@ -127,16 +127,16 @@ unit_tests:
     given:
       - input: ref('fct_portfolio_snapshots')
         rows:
-          - {reference_date: "2026-01-20", asset_class: "Cash", gross_value: 500, maturity_date: null}
-          - {reference_date: "2026-01-20", asset_class: "Fixed income", gross_value: 9000, maturity_date: "2030-01-01"}
-          - {reference_date: "2026-02-20", asset_class: "Cash", gross_value: 1150, maturity_date: null}
-          - {reference_date: "2026-02-20", asset_class: "Fixed income", gross_value: 9500, maturity_date: "2030-01-01"}
-          - {reference_date: "2026-03-20", asset_class: "Cash", gross_value: 1000, maturity_date: null}
-          - {reference_date: "2026-03-20", asset_class: "Fixed income", gross_value: 200, maturity_date: null}
-          - {reference_date: "2026-03-20", asset_class: "Fixed income", gross_value: 9663, maturity_date: "2030-01-01"}
-          - {reference_date: "2026-04-10", asset_class: "Cash", gross_value: 1000, maturity_date: null}
-          - {reference_date: "2026-04-10", asset_class: "Fixed income", gross_value: 200, maturity_date: null}
-          - {reference_date: "2026-04-10", asset_class: "Fixed income", gross_value: 10363, maturity_date: "2030-01-01"}
+          - {reference_date: "2026-01-20", asset_class: "Cash", gross_value: 500, maturity_date: null, is_liquid: true}
+          - {reference_date: "2026-01-20", asset_class: "Fixed income", gross_value: 9000, maturity_date: "2030-01-01", is_liquid: false}
+          - {reference_date: "2026-02-20", asset_class: "Cash", gross_value: 1150, maturity_date: null, is_liquid: true}
+          - {reference_date: "2026-02-20", asset_class: "Fixed income", gross_value: 9500, maturity_date: "2030-01-01", is_liquid: false}
+          - {reference_date: "2026-03-20", asset_class: "Cash", gross_value: 1000, maturity_date: null, is_liquid: true}
+          - {reference_date: "2026-03-20", asset_class: "Fixed income", gross_value: 200, maturity_date: null, is_liquid: true}
+          - {reference_date: "2026-03-20", asset_class: "Fixed income", gross_value: 9663, maturity_date: "2030-01-01", is_liquid: false}
+          - {reference_date: "2026-04-10", asset_class: "Cash", gross_value: 1000, maturity_date: null, is_liquid: true}
+          - {reference_date: "2026-04-10", asset_class: "Fixed income", gross_value: 200, maturity_date: null, is_liquid: true}
+          - {reference_date: "2026-04-10", asset_class: "Fixed income", gross_value: 10363, maturity_date: "2030-01-01", is_liquid: false}
       - input: ref('fct_transactions')
         rows:
           - {transaction_date: "2026-02-10", budget_month: "2026-02-01", amount: 1000, is_settled: false, is_investment_contribution: true, is_dividend: false}
@@ -183,14 +183,14 @@ unit_tests:
     given:
       - input: ref('fct_portfolio_snapshots')
         rows:
-          - {reference_date: "2026-01-31", asset_class: "Cash", gross_value: 1000, maturity_date: null}
-          - {reference_date: "2026-01-31", asset_class: "Fixed income", gross_value: 9000, maturity_date: "2030-01-01"}
-          - {reference_date: "2026-02-28", asset_class: "Cash", gross_value: 1703, maturity_date: null}
-          - {reference_date: "2026-02-28", asset_class: "Fixed income", gross_value: 9000, maturity_date: "2030-01-01"}
-          - {reference_date: "2026-03-31", asset_class: "Cash", gross_value: 1503, maturity_date: null}
-          - {reference_date: "2026-03-31", asset_class: "Fixed income", gross_value: 9000, maturity_date: "2030-01-01"}
-          - {reference_date: "2026-04-20", asset_class: "Cash", gross_value: 1500, maturity_date: null}
-          - {reference_date: "2026-04-20", asset_class: "Fixed income", gross_value: 9000, maturity_date: "2030-01-01"}
+          - {reference_date: "2026-01-31", asset_class: "Cash", gross_value: 1000, maturity_date: null, is_liquid: true}
+          - {reference_date: "2026-01-31", asset_class: "Fixed income", gross_value: 9000, maturity_date: "2030-01-01", is_liquid: false}
+          - {reference_date: "2026-02-28", asset_class: "Cash", gross_value: 1703, maturity_date: null, is_liquid: true}
+          - {reference_date: "2026-02-28", asset_class: "Fixed income", gross_value: 9000, maturity_date: "2030-01-01", is_liquid: false}
+          - {reference_date: "2026-03-31", asset_class: "Cash", gross_value: 1503, maturity_date: null, is_liquid: true}
+          - {reference_date: "2026-03-31", asset_class: "Fixed income", gross_value: 9000, maturity_date: "2030-01-01", is_liquid: false}
+          - {reference_date: "2026-04-20", asset_class: "Cash", gross_value: 1500, maturity_date: null, is_liquid: true}
+          - {reference_date: "2026-04-20", asset_class: "Fixed income", gross_value: 9000, maturity_date: "2030-01-01", is_liquid: false}
       - input: ref('fct_transactions')
         rows:
           - {transaction_date: "2026-02-10", budget_month: "2026-02-01", amount: 5000, is_settled: false, is_investment_contribution: true, is_dividend: false}
@@ -277,3 +277,29 @@ unit_tests:
         - {month: "2026-02-01", wealth_today_money: 1500, new_money: 400, new_money_goal: 200}
         - {month: "2026-03-01", wealth_today_money: null, new_money: null, new_money_goal: 200}
         - {month: "2026-04-01", wealth_today_money: null, new_money: null, new_money_goal: 200}
+
+  - name: test_portfolio_snapshots_liquidity_and_withdrawal_order
+    description: >
+      The cash balance, fixed income with no maturity, a name with "Liq. Diária" and a
+      holding listed in var liquid_assets have daily liquidity; a Tesouro bond with a
+      maturity doesn't. The cash balance is withdrawn first, then the listed holdings in
+      their order, then the rest, largest first.
+    model: fct_portfolio_snapshots
+    overrides:
+      vars:
+        liquid_assets: '[{"match": "Cofrinho%", "note": "Antes de um ano rende 30% do CDI"}]'
+    given:
+      - input: ref('stg_portfolio_snapshots')
+        rows:
+          - {snapshot_id: "a", reference_date: "2026-01-31", asset: "Saldo (CDI 100%)", asset_class: "Cash", gross_value: 100, maturity_date: null}
+          - {snapshot_id: "b", reference_date: "2026-01-31", asset: "CDB 110% CDI Liq. Diária", asset_class: "Fixed income", gross_value: 300, maturity_date: "2028-01-01"}
+          - {snapshot_id: "c", reference_date: "2026-01-31", asset: "Cofrinho 130%", asset_class: "Fixed income", gross_value: 50, maturity_date: "2027-01-01"}
+          - {snapshot_id: "d", reference_date: "2026-01-31", asset: "Tesouro IPCA+ 2035", asset_class: "Fixed income", gross_value: 1000, maturity_date: "2035-05-15"}
+          - {snapshot_id: "e", reference_date: "2026-01-31", asset: "Fundo Renda Fixa Alfa", asset_class: "Fixed income", gross_value: 200, maturity_date: null}
+    expect:
+      rows:
+        - {snapshot_id: "a", is_liquid: true, withdrawal_order: 1, liquidity_note: null}
+        - {snapshot_id: "b", is_liquid: true, withdrawal_order: 3, liquidity_note: null}
+        - {snapshot_id: "c", is_liquid: true, withdrawal_order: 2, liquidity_note: "Antes de um ano rende 30% do CDI"}
+        - {snapshot_id: "d", is_liquid: false, withdrawal_order: null, liquidity_note: null}
+        - {snapshot_id: "e", is_liquid: true, withdrawal_order: 4, liquidity_note: null}

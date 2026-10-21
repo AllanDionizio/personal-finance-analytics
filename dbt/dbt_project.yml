@@ -19,6 +19,10 @@ vars:
   # workbooks. 'savings': the investment rows also book money reinvested from
   # redemptions, so new money is the month's savings plus asset sales.
   new_money_source: "{{ env_var('NEW_MONEY_SOURCE', 'contributions') }}"
+  # Holdings with daily liquidity besides the cash balance, fixed income with
+  # no maturity and names with "Liq. Diária" (fct_portfolio_snapshots): a JSON
+  # list of {"match": ilike pattern, "note": text}, in the order to withdraw.
+  liquid_assets: "{{ env_var('LIQUID_ASSETS', '[]') }}"
   # Goals (fct_goals, fct_goal_tracking). The defaults suit the synthetic
   # household; make real reads the real ones from .env.real.
   # Financial independence: the month to reach it, the monthly cost of living
