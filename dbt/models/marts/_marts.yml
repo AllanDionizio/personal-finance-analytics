@@ -81,6 +81,10 @@ models:
                   - Person A
                   - Person B
                   - Other
+      - name: display_name
+        description: '{{ doc("display_name") }}'
+        data_tests:
+          - not_null
       - name: source_color
         description: "Cell color in the workbooks; NULL for 'Other'."
 
@@ -102,6 +106,10 @@ models:
                   - Card B
                   - Card C
                   - Other
+      - name: display_name
+        description: '{{ doc("display_name") }}'
+        data_tests:
+          - not_null
       - name: method_type
         description: '{{ doc("method_type") }}'
         data_tests:

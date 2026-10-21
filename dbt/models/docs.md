@@ -233,6 +233,11 @@ Projected return at maturity, as computed in the sheet.
 Surrogate key of the owner.
 {% enddocs %}
 
+{% docs display_name %}
+Label the dashboard shows. The placeholder itself unless a local run maps it
+to a real name through env var `DISPLAY_NAMES` (macro `display_name`).
+{% enddocs %}
+
 {% docs owner %}
 Whose income a credit is: `'Person A'`, `'Person B'` or `'Other'`, from the
 amount cell's color.

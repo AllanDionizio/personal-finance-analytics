@@ -27,5 +27,6 @@ owners as (
 select
     {{ dbt_utils.generate_surrogate_key(['owner']) }} as owner_key,
     owner,
+    {{ display_name('owner') }} as display_name,
     source_color
 from owners

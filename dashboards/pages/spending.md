@@ -35,7 +35,9 @@ select
     w.through_month
 from totals
 cross join ${ttm_window} as w
-left join warehouse.inflation as ipca on ipca.month = w.last_month
+-- the newest IPCA up to the window's end: the seed can lag the closed months
+left join warehouse.inflation as ipca
+    on ipca.month = (select max(month) from warehouse.inflation where month <= w.last_month)
 ```
 
 ## Last 12 closed months, through <Value data={spending_kpis} column=through_month />

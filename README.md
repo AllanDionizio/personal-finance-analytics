@@ -129,6 +129,17 @@ Or all three with `make all`. The dashboard needs Node.js 18 or newer; `make das
 
 No credentials or real data needed. The ingestion is idempotent: re-running on the same files reloads by `source_file` without duplicating rows. Unrecognized cell colors are logged with counts instead of failing the run.
 
+### Personal mode: real workbooks, in Portuguese
+
+The same code runs on the real workbooks, on one machine only. The XLSX files go in `data/raw/` and the warehouse in `data/real.duckdb`; both are gitignored. An optional `.env.real` file (copy `.env.real.example`) maps the placeholders (Person A, Card B) to the labels the dashboard should show.
+
+```bash
+make real            # data/raw → data/real.duckdb, dbt build with .env.real
+make real-dashboard  # the Portuguese dashboard on that warehouse, at 127.0.0.1
+```
+
+The Portuguese pages live in `dashboards/pt/`, laid over a copy of the project by `make dashboard-pt` (on the synthetic warehouse by default). They translate the English pages one to one, so a change to a page goes in both. Evidence formats numbers and chart months the Excel way, in English, so separators stay `1,234.5` in either language. Never run `make site` in personal mode: the published site is built from synthetic data only.
+
 ## Design decisions & trade-offs
 
 - **Decision:** English names for everything the project defines, source values left in Portuguese. **Why:** the code and models read for an international audience, while the raw layer stays a faithful copy of the workbooks (`'Sim'`, `'Mercado'`, `'Fixo'`). **Trade-off:** staging has to map the Portuguese values that drive logic, such as the paid flag and the special categories.

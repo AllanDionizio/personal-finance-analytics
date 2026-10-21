@@ -55,8 +55,12 @@ cross join (
     from warehouse.monthly_cashflow
     where budget_month >= (select first_month from ${ttm_window})
 ) as s
+-- the newest IPCA up to the window's end: the seed can lag the closed months
 left join warehouse.inflation as ipca
-    on ipca.month = (select last_month from ${ttm_window})
+    on ipca.month = (
+        select max(month) from warehouse.inflation
+        where month <= (select last_month from ${ttm_window})
+    )
 ```
 
 ```sql top_source
