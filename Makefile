@@ -1,6 +1,13 @@
 .PHONY: setup data deps build test docs lint all dashboard dashboard-dev site \
 	dashboard-pt dashboard-dev-pt real real-dashboard real-context
 
+# Use the project's virtualenv when there is one, activated or not (CI
+# installs into its own Python and has none)
+ifneq ($(wildcard $(CURDIR)/.venv/bin/python),)
+export VIRTUAL_ENV := $(CURDIR)/.venv
+export PATH := $(CURDIR)/.venv/bin:$(PATH)
+endif
+
 export DBT_PROFILES_DIR := $(CURDIR)/dbt
 # Evidence sends anonymous usage stats unless told not to
 export SEND_ANONYMOUS_USAGE_STATS := no
