@@ -73,7 +73,7 @@ Over the 12 months through **{kpis[0]?.through_month}**, the household earned **
 
 The portfolio is worth **{fmt(worth[0]?.total_value, 'brl0')}**, {fmt(Math.abs(worth[0]?.value_change_1y), 'pct1')} {worth[0]?.value_change_1y >= 0 ? 'more' : 'less'} than a year earlier. Over the 12 months through {real_return[0]?.through_month}, it returned {fmt(real_return[0]?.return_12m, 'pct1')} against {fmt(real_return[0]?.inflation_12m, 'pct1')} of inflation (IPCA): {#if real_return[0]?.real_return_12m >= 0}a real gain of **{fmt(real_return[0]?.real_return_12m, 'pct1')}**{:else}a real **loss** of {fmt(Math.abs(real_return[0]?.real_return_12m), 'pct1')}{/if}.
 
-The liquid reserve covers **{fmt(worth[0]?.reserve_months, 'num1')} months** of fixed costs ({worth[0]?.reserve_status?.toLowerCase()}: 6 to 12 months). Installments still owed add up to **{fmt(owed[0]?.owed, 'brl0')}**, about {fmt(owed[0]?.months_of_income, 'num1')} months of income.
+The liquid reserve covers **{fmt(worth[0]?.reserve_months, 'num1')} months** of spending ({worth[0]?.reserve_status?.toLowerCase()}: 6 to 12 months). Installments still owed add up to **{fmt(owed[0]?.owed, 'brl0')}**, about {fmt(owed[0]?.months_of_income, 'num1')} months of income.
 
 </div>
 
@@ -122,7 +122,7 @@ The liquid reserve covers **{fmt(worth[0]?.reserve_months, 'num1')} months** of 
 <BigValue
     data={worth}
     value=reserve_months
-    title="Liquid reserve, months of fixed costs"
+    title="Liquid reserve, months of spending"
     fmt=num1
     sparkline=snapshot_at
     link="/portfolio"
@@ -170,6 +170,7 @@ Income minus spending, month by month. The surplus is what pays for the contribu
 - **[Spending](/spending)** Where it goes, what changed over the last year, and whether spending is outpacing income and inflation
 - **[Installments](/installments)** How much of the future is already committed
 - **[Portfolio](/portfolio)** Whether the portfolio grows from contributions or from returns, and whether it beats inflation
+- **[Goals](/goals)** How far financial independence is, and what it takes a month to get there
 
 </div>
 

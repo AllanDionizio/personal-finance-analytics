@@ -55,8 +55,12 @@ cross join (
     from warehouse.monthly_cashflow
     where budget_month >= (select first_month from ${ttm_window})
 ) as s
+-- the newest IPCA up to the window's end: the seed can lag the closed months
 left join warehouse.inflation as ipca
-    on ipca.month = (select last_month from ${ttm_window})
+    on ipca.month = (
+        select max(month) from warehouse.inflation
+        where month <= (select last_month from ${ttm_window})
+    )
 ```
 
 ```sql top_source
@@ -190,14 +194,14 @@ select
     y.closed_months,
     sum(m.income) as income,
     sum(m.spending) as spending,
-    sum(m.invested) as invested,
+    sum(m.new_money) as new_money,
     sum(m.savings) as savings,
     sum(m.savings) / sum(m.income) as savings_rate,
     sum(m.non_operating_income) as non_operating_income
 from warehouse.monthly_cashflow as m
 inner join ${years} as y on m.budget_year = y.year
 group by y.year_label, y.closed_months
-order by y.year_label
+order by y.year_label desc
 ```
 
 <DataTable data={yearly}>
@@ -206,11 +210,11 @@ order by y.year_label
     <Column id=spending fmt=brl0 />
     <Column id=savings fmt=brl0 />
     <Column id=savings_rate fmt=pct1 title="Savings rate" />
-    <Column id=invested fmt=brl0 title="Into investments" />
+    <Column id=new_money fmt=brl0 title="New money" />
     <Column id=non_operating_income fmt=brl0 title="One-off (asset sales)" />
 </DataTable>
 
-Savings is income minus spending: what went into investments plus what stayed in the account.
+Savings is income minus spending: what went into investments plus what stayed in the account. New money is what entered the household's wealth from outside the portfolio: here, the money put into investments.
 
 ## One-off money
 
@@ -221,7 +225,7 @@ select
     effective_amount as amount
 from ${closed_credits}
 where not is_operating
-order by budget_month
+order by budget_month desc
 ```
 
 Credits in the "Investimentos" category come from selling an asset (here, a car sold in installments). They count as cash, but not as income, so they don't inflate the savings rate of the year they land in.

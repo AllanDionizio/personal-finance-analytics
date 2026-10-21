@@ -5,7 +5,7 @@ sidebar_position: 4
 
 The workbooks only show the installments that fall inside their own years, so a purchase made late in the newest year has installments that appear nowhere. dbt rebuilds each purchase's full plan from the installments it does find, so this page can answer how much is still owed and until when.
 
-An installment counts as paid when its month comes before the newest month with paid entries. From that month on, the workbook's paid flag decides.
+An installment counts as paid when its month comes before the newest month with paid entries (never later than the current month). From that month on, the workbook's paid flag decides.
 
 ```sql summary
 select

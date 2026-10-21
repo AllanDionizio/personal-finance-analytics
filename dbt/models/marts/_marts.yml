@@ -81,6 +81,10 @@ models:
                   - Person A
                   - Person B
                   - Other
+      - name: display_name
+        description: '{{ doc("display_name") }}'
+        data_tests:
+          - not_null
       - name: source_color
         description: "Cell color in the workbooks; NULL for 'Other'."
 
@@ -102,6 +106,10 @@ models:
                   - Card B
                   - Card C
                   - Other
+      - name: display_name
+        description: '{{ doc("display_name") }}'
+        data_tests:
+          - not_null
       - name: method_type
         description: '{{ doc("method_type") }}'
         data_tests:
@@ -172,14 +180,15 @@ models:
                 field: purchase_id
       - name: amount
         description: >
-          Amount as typed; `side` says the direction. Positive except card adjustments, which
-          are negative (a discount on the card bill).
+          Amount as typed; `side` says the direction. Credits are never negative. A negative
+          debit is a refund or discount (an estorno, a discount for paying installments early)
+          and nets against its category's spending; card adjustments are negative too.
         data_tests:
           - not_null
           - dbt_expectations.expect_column_values_to_be_between:
               arguments:
                 min_value: 0
-                row_condition: not is_card_adjustment
+                row_condition: side = 'credit'
       - name: effective_amount
         description: amount if is_effective, else 0.
       - name: signed_effective_amount
@@ -284,7 +293,8 @@ models:
         description: True if the installment is in the workbooks.
       - name: is_settled
         description: >
-          True before the as-of month (the newest month with a settled transaction): past
+          True before the as-of month (the newest month with a settled transaction, capped at
+          the current month): past
           installments are always paid. From then on, the sheet's status for a recorded installment,
           and false for one past the newest workbook.
     data_tests:
@@ -302,7 +312,8 @@ models:
   - name: fct_monthly_cashflow
     description: >
       One row per closed budget month (every month before the as-of month, the newest one with
-      a settled transaction): income, spending and savings, defined once for the dashboard.
+      a settled transaction, capped at the current month): income, spending and savings,
+      defined once for the dashboard.
     columns:
       - name: budget_month
         description: '{{ doc("budget_month") }}'
@@ -345,9 +356,20 @@ models:
           The part of spending in categories with neither macro-category (Unknown or blank);
           0 when every category is classified.
       - name: invested
-        description: Settled debits into investments, the money left out of spending.
+        description: >
+          Debits into investments, whatever their status (the sheets leave them at 'Não'): the
+          money left out of spending. Includes reinvested redemptions where the workbooks book
+          them (see new_money).
       - name: savings
         description: income - spending, i.e. what was invested plus what stayed in the account.
+      - name: new_money
+        description: >
+          What the household added to its wealth (var new_money_source): invested, when every
+          investment row is new money; savings plus non_operating_income, when the investment
+          rows also book money reinvested from redemptions, minus dividends (the portfolio
+          earned them).
+        data_tests:
+          - not_null
     data_tests:
       - dbt_utils.expression_is_true:
           arguments:
@@ -419,14 +441,19 @@ models:
           - not_null
       - name: contributions
         description: >
-          Settled investment contributions dated after the previous snapshot, up to this one.
-          The only external flow the workbooks record. NULL for the first snapshot.
+          New money that came in after the previous snapshot, up to this one: the investment
+          contributions, whatever their status, or the closed months' new_money when var
+          new_money_source is 'savings' (negative when the period spent more than it earned).
+          NULL for the first snapshot, and with 'savings' for a period that reaches a month
+          not closed yet.
       - name: dividends
         description: >
-          Settled dividends paid in the same window, counted as return. NULL for the first
-          snapshot.
+          Settled dividends paid in the same window, counted as return. NULL like
+          contributions.
       - name: period_gain
-        description: total_value - previous total_value - contributions + dividends.
+        description: >
+          total_value - previous total_value - contributions, plus the dividends when they are
+          paid outside the portfolio (new_money_source 'contributions').
       - name: period_return
         description: >
           Modified Dietz return of the period: period_gain over the previous value plus half the
@@ -458,8 +485,8 @@ models:
         description: (1 + return_ytd) / (1 + inflation_ytd) - 1.
       - name: avg_monthly_spending
         description: >
-          Average monthly spending over the 12 closed months up to the snapshot's month; NULL
-          with fewer.
+          Average monthly spending over the last 12 closed months up to the snapshot's month
+          (a snapshot in the current, open month uses the 12 before it); NULL with fewer.
       - name: avg_monthly_fixed_spending
         description: Average monthly fixed spending over the same 12 months.
       - name: runway_months
@@ -468,12 +495,12 @@ models:
           spending.
       - name: reserve_months
         description: >
-          liquid_reserve / avg_monthly_fixed_spending: how many months the reserve would pay for
-          fixed costs.
+          liquid_reserve / avg_monthly_spending: how many months the reserve would pay for all
+          spending.
       - name: reserve_status
         description: >
           'Below target', 'Within target' or 'Above target' against the project vars
-          reserve_min_months and reserve_max_months (6 and 12 months of fixed spending).
+          reserve_min_months and reserve_max_months (6 and 12 months of spending).
         data_tests:
           - accepted_values:
               arguments:
@@ -484,7 +511,10 @@ models:
             expression: "liquid_reserve <= total_value"
       - dbt_utils.expression_is_true:
           arguments:
-            expression: "contributions >= 0 and dividends >= 0"
+            # new money from savings is negative in a month that spent more than it earned
+            expression: >-
+              dividends >= 0
+              and (contributions >= 0 or '{{ var("new_money_source") }}' = 'savings')
           config:
             where: "contributions is not null"
 
@@ -534,3 +564,109 @@ models:
         description: '{{ doc("return_to_date") }}'
       - name: return_at_maturity
         description: '{{ doc("return_at_maturity") }}'
+      - name: is_liquid
+        description: >
+          Daily liquidity, withdrawable the same day without losing what was put in: the cash
+          balance, fixed income with no maturity, a name with "Liq. Diária", or a name in var
+          liquid_assets. These holdings are the liquid reserve.
+        data_tests:
+          - not_null
+      - name: withdrawal_order
+        description: >
+          Where a liquid holding comes in the order to withdraw from, per snapshot: the cash
+          balance first, then var liquid_assets' order, then the largest. NULL when not liquid or
+          empty.
+      - name: liquidity_note
+        description: The note var liquid_assets gives the holding (a penalty, a date to wait for).
+
+  - name: fct_goals
+    description: >
+      One row: where the household stands against its goals at the newest portfolio
+      snapshot. Financial independence (the target, the monthly new money it needs by the
+      target month, and when the current pace gets there), the new money goal of the current
+      month, and the liquid reserve goal. Amounts are in today's money; the goal settings are
+      project vars (fi_*, new_money_goal_*, reserve_min_months).
+    data_tests:
+      - dbt_expectations.expect_table_row_count_to_equal:
+          arguments:
+            value: 1
+    columns:
+      - name: as_of_date
+        description: The newest snapshot's reference date.
+        data_tests:
+          - not_null
+      - name: projection_from
+        description: The month the projections start from, the newest snapshot's.
+      - name: wealth
+        description: The portfolio's value at the newest snapshot.
+      - name: fi_monthly_spending
+        description: >
+          The monthly cost of living independence has to cover: var fi_monthly_spending, or the
+          last 12 closed months' average spending.
+      - name: fi_withdrawal_rate
+        description: Yearly share of the portfolio that can be spent for good (var).
+      - name: fi_real_return
+        description: Yearly return above inflation the projections assume (var).
+      - name: monthly_return
+        description: fi_real_return as a monthly rate.
+      - name: fi_target_value
+        description: fi_monthly_spending * 12 / fi_withdrawal_rate.
+        data_tests:
+          - not_null
+      - name: fi_progress
+        description: wealth / fi_target_value.
+      - name: fi_target_month
+        description: The month independence should be reached (var fi_target_month).
+      - name: months_to_target
+        description: Months from projection_from to fi_target_month.
+      - name: required_monthly_new_money
+        description: >
+          New money a month, in today's money, that takes wealth to fi_target_value by
+          fi_target_month; 0 when the return alone gets there, NULL once the month has passed.
+      - name: current_monthly_new_money
+        description: Average new_money of the last 12 closed months.
+      - name: projected_fi_month
+        description: >
+          When the portfolio reaches fi_target_value at the current pace; NULL when it doesn't
+          within a century.
+      - name: new_money_goal
+        description: >
+          The current month's new money goal: none before new_money_goal_from, then
+          new_money_goal_start raised by new_money_goal_step every 12 months, never above
+          required_monthly_new_money.
+      - name: reserve
+        description: The liquid reserve at the newest snapshot (fct_net_worth.liquid_reserve).
+      - name: reserve_target
+        description: reserve_min_months times the average monthly spending.
+        data_tests:
+          - not_null
+      - name: reserve_progress
+        description: reserve / reserve_target.
+
+  - name: fct_goal_tracking
+    description: >
+      One row per month, from the first portfolio snapshot to the independence target month:
+      the portfolio in today's money, new money against its goal, and two projections from
+      the newest snapshot, at the pace independence needs and at the current pace.
+    columns:
+      - name: month
+        description: First day of the month.
+        data_tests:
+          - unique
+          - not_null
+      - name: wealth_today_money
+        description: >
+          The month's last snapshot value at today's prices (price index of today over the
+          month's); NULL for a month without a snapshot.
+      - name: new_money
+        description: fct_monthly_cashflow.new_money; NULL outside the closed months.
+      - name: new_money_goal
+        description: The month's new money goal (see fct_goals.new_money_goal).
+      - name: fi_target_value
+        description: The independence target, the same every month.
+      - name: required_path
+        description: >
+          From the newest snapshot's month on, the value the portfolio reaches with
+          required_monthly_new_money a month; it ends on fi_target_value.
+      - name: current_pace_path
+        description: The same projection with current_monthly_new_money.

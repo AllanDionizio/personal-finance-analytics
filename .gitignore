@@ -18,6 +18,7 @@ htmlcov/
 .env
 .env.*
 !.env.example
+!.env.real.example
 *.json.key
 service-account*.json
 # dbt/profiles.yml IS committed: it only reads credentials from env vars
@@ -26,6 +27,7 @@ service-account*.json
 data/raw/*
 !data/raw/.gitkeep
 data/processed/
+data/personal/
 data/synthetic/
 *.duckdb
 *.duckdb.wal
@@ -46,6 +48,8 @@ dashboards/.evidence/
 dashboards/build/
 # Assembled Pages site (make site)
 site/
+# Portuguese dashboard, assembled from dashboards/pt (make dashboard-pt)
+.dashboards-pt/
 node_modules/
 
 # Claude Code (local settings only)

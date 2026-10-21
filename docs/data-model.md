@@ -143,7 +143,8 @@ frequent spelling, since case drifts when typed by hand (`'Banco alfa
 (fundos)'`). `asset_class` is inferred from the asset name: `'Real estate
 fund'` (FIIs), `'Fixed income'` (CDB, LCI, CRI, CCB, Tesouro, CDI-indexed),
 `'Multimarket fund'`, `'Crypto'`, `'Cash'` (account balance) or `'Other'`
-(FGTS, pension, equity). `snapshot_id` is `hash(reference_date|bank|asset)`.
+(FGTS, pension, equity). `snapshot_id` is `hash(reference_date|bank|asset|maturity_date)`, since two
+lots of the same product differ only by their maturity date.
 
 ### `stg_categories`
 
@@ -152,6 +153,10 @@ files (seed `legacy_categories`, e.g. `'Farmácia'`, `'Uber'`), keyed by
 `category_key = hash(category_type|category)`. The macro-category is
 translated: `'Fixo'` → `'Fixed'`, `'Variável'` → `'Variable'`, `'n/a'` →
 `'Not applicable'`.
+
+A category the list later renamed (seed `category_renames`, e.g. `'Pets'` →
+`'Pets Necessidades'`) is read as the new name in `stg_transactions`, so its
+history joins the current category instead of becoming a legacy one.
 
 ## 4. Intermediate and marts
 
@@ -176,10 +181,12 @@ on debits and `payment_method_key` on credits, which a test enforces.
 | `dim_payment_method` | one row per payment method | `payment_method_key`, `payment_method`, `method_type` (`'credit_card'` / `'other'`), `source_color` |
 | `fct_transactions` | one row per transaction | `transaction_id`; FKs to the dims for `transaction_date`, `budget_month`, category, owner, payment method; `purchase_id` for installments; `amount`, `effective_amount` (amount if effective, else 0), `signed_effective_amount` (+ credits, − debits); the flags and installment columns of staging |
 | `fct_installments` | one row per installment of every purchase | `installment_id`, `purchase_id`, `installment_number`, `budget_month`, `transaction_id` (NULL outside the workbooks), `amount`, `outstanding_amount`, `is_recorded`, `is_settled` (6.9) |
-| `fct_monthly_cashflow` | one row per closed budget month (6.10) | `budget_month`, `income` (operating), `non_operating_income`, `dividends`, `spending`, `fixed_spending`, `variable_spending`, `unclassified_spending`, `invested`, `savings` (`income − spending`) |
+| `fct_monthly_cashflow` | one row per closed budget month (6.10) | `budget_month`, `income` (operating), `non_operating_income`, `dividends`, `spending`, `fixed_spending`, `variable_spending`, `unclassified_spending`, `invested`, `savings` (`income − spending`), `new_money` |
 | `fct_net_worth` | one row per portfolio snapshot (6.11) | `reference_date`, `total_value`, `liquid_reserve`, `contributions`, `dividends`, `period_return`, `period_inflation`, `return_12m`, `inflation_12m`, `real_return_12m`, the same year to date, `runway_months`, `reserve_months`, `reserve_status` |
 | `fct_inflation_monthly` | one row per month (6.12) | `month`, `ipca_pct`, `ipca_rate`, `price_index`, `ipca_12m`, `ipca_ytd` |
-| `fct_portfolio_snapshots` | one row per asset per reference date | `snapshot_id` (`hash(reference_date\|bank\|asset)`), `reference_date`, `bank`, `asset`, `asset_class` (`'Real estate fund'` / `'Fixed income'` / `'Multimarket fund'` / `'Crypto'` / `'Cash'` / `'Other'`), `gross_value`, `allocation_pct`, `maturity_date`, `mom`, `yoy` |
+| `fct_goals` | one row (6.13) | `as_of_date`, `wealth`, `fi_target_value`, `fi_progress`, `fi_target_month`, `required_monthly_new_money`, `current_monthly_new_money`, `projected_fi_month`, `new_money_goal`, `reserve`, `reserve_target`, `reserve_progress` |
+| `fct_goal_tracking` | one row per month, first snapshot to the target month (6.13) | `month`, `wealth_today_money`, `new_money`, `new_money_goal`, `fi_target_value`, `required_path`, `current_pace_path` |
+| `fct_portfolio_snapshots` | one row per asset per reference date | `snapshot_id` (`hash(reference_date\|bank\|asset\|maturity_date)`), `reference_date`, `bank`, `asset`, `asset_class` (`'Real estate fund'` / `'Fixed income'` / `'Multimarket fund'` / `'Crypto'` / `'Cash'` / `'Other'`), `gross_value`, `allocation_pct`, `maturity_date`, `mom`, `yoy` |
 
 ## 5. Source → model mapping
 
@@ -336,9 +343,10 @@ each sheet row.
 
 ### 6.6 Empty rows
 
-A side is empty when description, amount and date are all null; it is
-skipped. A zero amount (e.g. a benefit row left at 0) is **kept**, since
-"no payment this month" is information.
+A side is empty when amount and date are both null; it is skipped. A
+description alone is a placeholder, such as a fund ticker typed before its
+dividend is paid. A zero amount (e.g. a benefit row left at 0) is **kept**,
+since "no payment this month" is information.
 
 ### 6.7 Categories with dedicated flags
 
@@ -378,7 +386,8 @@ is no workbook before 2021 or after the newest year. So a purchase from late
 - **Schedule**: `fct_installments` lays out installments 1 to N of each
   purchase.
 - **Settled**: every installment before the as-of month (the newest month
-  with a settled transaction) is paid. In the sheets a past installment is
+  with a settled transaction, capped at the current month, since the sheets
+  also mark future rows as settled) is paid. In the sheets a past installment is
   always paid, so a leftover `'Não'` is a typing slip, and installments
   before 2021 are in no workbook. From the as-of month on, a recorded
   installment keeps the sheet's status, and one past the newest workbook is
@@ -399,33 +408,52 @@ them up the same way:
   savings rate (seed `income_groups`, `is_operating = false`). Dividends are
   operating income and also get their own column. **Spending**:
   `effective_amount` of debits, so investment contributions (not effective)
-  are left out and card adjustments (negative) lower it.
+  are left out, and refunds and card adjustments (negative debits) lower it.
 - **Fixed / variable / unclassified**: spending split by the category's
   macro-category; unclassified covers `'Unknown'` and blanks. The three add
   up to spending (tested).
-- **Invested**: settled investment contributions. **Savings**: income −
+- **Invested**: every investment contribution, whatever its status: the
+  sheets leave them at `'Não'` so the workbook's own report doesn't count
+  them as spending. **Savings**: income −
   spending, i.e. what was invested plus what stayed in the account.
+- **New money**: what entered the household's wealth from outside the
+  portfolio, by var `new_money_source`. `'contributions'` (the default, and
+  the synthetic workbooks): `invested`. `'savings'` (`make real`): the real
+  workbooks also book money reinvested from a redemption as a contribution,
+  so `invested` overstates it; new money is savings plus non-operating
+  income minus dividends, which the portfolio earned.
 
 ### 6.11 Portfolio return and liquid reserve
 
 `fct_net_worth` has one row per snapshot:
 
-- **External flows**: the settled investment contributions dated after the
-  previous snapshot, up to this one (a row without a date counts at
-  mid-month). The workbooks record contributions only: a maturing asset is
-  reinvested inside the portfolio and books nothing, and a withdrawal to
-  spend isn't recorded, which understates that period's return.
+- **External flows** (`contributions`), by var `new_money_source`:
+  - `'contributions'`: the investment contributions dated after the
+    previous snapshot, up to this one, whatever their status (a row without
+    a date counts at mid-month). A maturing asset is reinvested inside the
+    portfolio and books nothing, and a withdrawal to spend isn't recorded,
+    which understates that period's return. Dividends are paid outside the
+    portfolio, so they are added back as return.
+  - `'savings'`: the `new_money` of each closed month whose midpoint falls
+    in the period. A month that spends more than it earns is a withdrawal.
+    Dividends land in the account the portfolio tracks, so they are already
+    in its value. A period that reaches a month not closed yet has no
+    flows and no return until that month closes. FGTS deposits aren't in
+    the workbooks, so they show up as return.
 - **Return of a period** (modified Dietz): `(value − previous value −
-  contributions + dividends) / (previous value + contributions / 2)`.
-  Dividends are paid into the account, so they count as return.
+  contributions [+ dividends paid outside]) / (previous value +
+  contributions / 2)`.
 - **Against inflation**: IPCA is compounded over the months of each period
   (after the previous snapshot's month, up to this one's), then returns and
   inflation are chained over the last 12 periods and over the year, and
   `real = (1 + return) / (1 + inflation) − 1`. NULL while a month isn't
   published or there are fewer than 12 periods.
-- **Liquid reserve**: the cash balance plus fixed income with no maturity
-  date (daily liquidity), in months of the average fixed spending of the 12
-  closed months up to the snapshot's month. The target band is 6 to 12
+- **Liquid reserve**: every holding with daily liquidity
+  (`fct_portfolio_snapshots.is_liquid`: the cash balance, fixed income with
+  no maturity, a name with "Liq. Diária", or a name in var `liquid_assets`,
+  which also sets the order to withdraw from), in months of the average spending of the
+  last 12 closed months up to the snapshot's month (a snapshot in the
+  current, open month uses the 12 before it). The target band is 6 to 12
   months (vars `reserve_min_months`, `reserve_max_months`).
 - **Runway**: the whole portfolio in months of average spending.
 
@@ -435,6 +463,30 @@ Seed `ipca_monthly` holds the official IPCA, monthly, from the Central
 Bank's public API (SGS series 433), refreshed by hand.
 `fct_inflation_monthly` adds the price index (100 before the first month)
 and the 12-month and year-to-date rates, compounded from the monthly ones.
+
+### 6.13 Goals
+
+The goal settings are project vars; the defaults suit the synthetic
+household, and `make real` reads the real ones from `.env.real`.
+
+- **Financial independence**: the portfolio pays the cost of living for
+  good when a yearly withdrawal of `fi_withdrawal_rate` (4%) covers it, so
+  the target is `fi_monthly_spending × 12 / fi_withdrawal_rate`. Without
+  `fi_monthly_spending`, the cost of living is the last 12 closed months'
+  average spending.
+- **Projections**: from the newest snapshot, the portfolio grows by
+  `fi_real_return` (4.5%) a year above inflation, so every amount is in
+  today's money. The required monthly new money is the annuity that takes
+  today's value to the target by `fi_target_month`; the current pace is the
+  last 12 closed months' average `new_money`, and the projected month is
+  when that pace reaches the target (NULL beyond a century).
+- **Past values** in `fct_goal_tracking` are brought to today's prices with
+  the month's price index; a month the IPCA seed doesn't reach yet takes the
+  newest index.
+- **New money goal**: from `new_money_goal_from`, `new_money_goal_start` a
+  month, raised by `new_money_goal_step` every 12 months, never above the
+  required monthly new money (macro `new_money_goal`).
+- **Reserve goal**: `reserve_min_months` of the average monthly spending.
 
 ## 7. Decisions
 
@@ -451,8 +503,9 @@ and the 12-month and year-to-date rates, compounded from the monthly ones.
 11. **Past installments** → always paid in `fct_installments`, whatever the sheet says
 12. **Dashboard metrics** → defined in `fct_monthly_cashflow`, over closed months only; Evidence only selects and filters
 13. **Money from selling an asset** → non-operating income, outside income and the savings rate
-14. **Portfolio return** → modified Dietz, recorded contributions as the only external flow, dividends as return; compared with IPCA over the same periods
-15. **Liquid reserve** → cash plus fixed income with no maturity; target 6 to 12 months of fixed spending
+14. **Portfolio return** → modified Dietz, with new money as the only external flow (the recorded contributions, or the savings where contributions also book reinvestments), dividends as return; compared with IPCA over the same periods
+15. **Liquid reserve** → every holding with daily liquidity (cash, fixed income with no maturity, "Liq. Diária", or listed in a local var with its withdrawal order); target 6 to 12 months of all spending, the household's whole cost of living rather than the bills alone
+16. **Goals** → settings as dbt vars (synthetic defaults, real values from a gitignored file); independence at a 4% withdrawal rate, projected at 4.5% a year above inflation, in today's money
 
 ## 8. Bugs found with the synthetic data (fixed)
 

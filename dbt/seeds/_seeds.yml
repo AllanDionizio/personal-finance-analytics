@@ -46,6 +46,33 @@ seeds:
       - name: macro_category
         description: As typed in the source ('Fixo', 'Variável', 'n/a').
 
+  - name: category_renames
+    description: >
+      Categories typed in old workbooks under a name the canonical list later
+      changed, mapped to the current name so their history joins it.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ["category_type", "category"]
+    columns:
+      - name: category_type
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["income", "expense"]
+      - name: category
+        description: The old name, as typed.
+        data_tests:
+          - not_null
+      - name: renamed_to
+        description: The canonical name it is read as.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_categories')
+                field: category
+
   - name: asset_aliases
     description: >
       Asset names that are really a note typed over the name (e.g. a rate

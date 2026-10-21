@@ -348,8 +348,9 @@ def _read_transaction(
     amount = _to_decimal(ws.cell(row, amount_col).value) if amount_col else None
     when = _to_date(ws.cell(row, date_col).value) if date_col else None
 
-    # Empty side: description, amount AND date all null. A zero amount is kept.
-    if description is None and amount is None and when is None:
+    # Empty side: no amount AND no date. A description alone is a placeholder
+    # (e.g. a fund ticker typed before its dividend is paid). A zero amount is kept.
+    if amount is None and when is None:
         return None
 
     cat_col = colmap.get("category")

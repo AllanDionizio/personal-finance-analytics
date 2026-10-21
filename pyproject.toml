@@ -30,7 +30,7 @@ dev = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["ingestion", "synthetic"]
+packages = ["ingestion", "synthetic", "reports"]
 
 [tool.ruff]
 line-length = 100

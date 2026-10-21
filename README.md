@@ -48,10 +48,12 @@ Star schema built by dbt in three layers: staging cleans and types the raw table
 | --- | --- | --- | --- |
 | `fct_transactions` | Fact | One row per transaction | Credits and debits, with installment and effective-amount flags |
 | `fct_installments` | Fact | One row per installment of every purchase | Full installment plans, including installments outside the workbooks' years; answers how much is still owed |
-| `fct_portfolio_snapshots` | Fact | One row per asset per reference date | Investment portfolio history |
+| `fct_portfolio_snapshots` | Fact | One row per asset per reference date | Investment portfolio history, with each holding's daily liquidity and place in the order to withdraw from |
 | `fct_monthly_cashflow` | Fact | One row per closed budget month | Operating income, dividends, one-off income, spending (fixed / variable), investments and savings; the dashboard's metrics, defined once |
 | `fct_net_worth` | Fact | One row per portfolio snapshot | Value, contributions, modified Dietz return and inflation over the same periods (12 months and year to date), liquid reserve against its target |
 | `fct_inflation_monthly` | Fact | One row per month | Official inflation (IPCA) with its price index, 12-month and year-to-date rates |
+| `fct_goals` | Fact | One row | The household against its goals: financial independence (target, new money it needs, when the current pace gets there), new money and liquid reserve |
+| `fct_goal_tracking` | Fact | One row per month to the independence target | Value in today's money, new money against its goal, and the projections to the target |
 | `dim_date` | Dimension | One row per day | Generated calendar |
 | `dim_category` | Dimension | One row per category | Category, macro-category (fixed / variable), type |
 | `dim_owner` | Dimension | One row per owner | Derived from cell colors |
@@ -84,6 +86,7 @@ Five Evidence pages (`dashboards/`) over the marts, built as a static site. They
 | Spending | Where does it go, and what changed? | Real spending growth; the categories that moved most in a year; spending against income and inflation, indexed; fixed against variable costs |
 | Installments | How much of the future is committed? | Amount still owed, in months of income; what falls due each month, past the newest workbook; open purchases |
 | Portfolio | Does it grow from contributions or returns, and does it beat inflation? | Value against invested capital; return against IPCA by year and over rolling 12 months; liquid reserve against its 6–12 month band; maturity ladder; concentration; dividends |
+| Goals | How far is financial independence, and what does it take? | Target, progress and the monthly new money it needs; the path to it against the current pace; new money against a goal that rises every year; liquid reserve against its target, and the holdings to withdraw from, in order |
 
 The metrics live in dbt (`fct_monthly_cashflow`, `fct_net_worth`, `fct_inflation_monthly`), where they are tested and documented; Evidence only reads the marts and filters them. A month counts once it is closed, so the month still being paid doesn't drag the totals down.
 
@@ -129,13 +132,27 @@ Or all three with `make all`. The dashboard needs Node.js 18 or newer; `make das
 
 No credentials or real data needed. The ingestion is idempotent: re-running on the same files reloads by `source_file` without duplicating rows. Unrecognized cell colors are logged with counts instead of failing the run.
 
+### Personal mode: real workbooks, in Portuguese
+
+The same code runs on the real workbooks, on one machine only. The XLSX files go in `data/raw/` and the warehouse in `data/real.duckdb`; both are gitignored. An optional `.env.real` file (copy `.env.real.example`) maps the placeholders (Person A, Card B) to the labels the dashboard should show and holds the household's own goals.
+
+```bash
+make real            # data/raw → data/real.duckdb, dbt build with .env.real, new money from savings
+make real-dashboard  # the Portuguese dashboard on that warehouse, at 127.0.0.1
+make real-context    # a Markdown summary for a chat assistant, in data/personal/
+```
+
+`make real-context` writes `data/personal/contexto.md` (gitignored): the goals, the last 12 months, the portfolio and the reserve in the order to withdraw from, after a hand-written profile in `data/personal/perfil.md`. Uploaded to a chat assistant's project, it answers a one-off question (a fund, a CDB) with the household's situation in view.
+
+The Portuguese pages live in `dashboards/pt/`, laid over a copy of the project by `make dashboard-pt` (on the synthetic warehouse by default). They translate the English pages one to one, so a change to a page goes in both. Evidence formats numbers and chart months the Excel way, in English, so separators stay `1,234.5` in either language. Never run `make site` in personal mode: the published site is built from synthetic data only.
+
 ## Design decisions & trade-offs
 
 - **Decision:** English names for everything the project defines, source values left in Portuguese. **Why:** the code and models read for an international audience, while the raw layer stays a faithful copy of the workbooks (`'Sim'`, `'Mercado'`, `'Fixo'`). **Trade-off:** staging has to map the Portuguese values that drive logic, such as the paid flag and the special categories.
 - **Decision:** keep the raw layer literal (installment suffixes and raw color codes untouched). **Why:** parsing rules can change and be replayed in dbt without re-reading the workbooks. **Trade-off:** the raw tables are not directly queryable for analysis.
 - **Decision:** resolve both `rgb` and `theme` color references. **Why:** Google Sheets exports the same visible color either as a hex value or as a theme index, depending on how it was applied. The ingestion loads each workbook's theme palette into `raw.workbook_themes`, so dbt resolves a theme index against the file it came from. **Trade-off:** one more raw table, and theme tints are not applied (the owner colors in these workbooks have none).
 - **Decision:** keep money from selling an asset (the `'Investimentos'` income category) out of income, as non-operating income. **Why:** it is real cash in but doesn't repeat; counted as income, it would inflate the savings rate of the year it lands in. **Trade-off:** the split lives in a seed (`income_groups`) that has to follow how the categories are used.
-- **Decision:** measure the portfolio's return with the modified Dietz method, taking the recorded contributions as the only external flow and counting dividends as return. **Why:** the workbooks record contributions but not withdrawals (a maturing asset is reinvested inside the portfolio), and Dietz handles flows in the middle of a period without daily valuations. **Trade-off:** a withdrawal to spend that isn't recorded understates that period's return; it can't overstate it.
+- **Decision:** measure the portfolio's return with the modified Dietz method, taking the household's new money as the only external flow and counting dividends as return. New money is the recorded contributions by default; a var switches it to the month's savings for workbooks that also book reinvested redemptions as contributions, as the real ones do. **Why:** the workbooks record contributions but not withdrawals (a maturing asset is reinvested inside the portfolio), and Dietz handles flows in the middle of a period without daily valuations. **Trade-off:** with contributions, a withdrawal to spend that isn't recorded understates that period's return; with savings, the newest period waits for its month to close, and money that never reaches the tracked accounts reads as a loss.
 - **Decision:** official inflation (IPCA) as a versioned seed from the Central Bank's public API, compounded over the same periods as the return. **Why:** the build stays reproducible and offline, and "did we beat inflation?" compares like with like. **Trade-off:** the seed is refreshed by hand when a new month is published.
 - **Decision:** define the dashboard's metrics in a dbt mart (`fct_monthly_cashflow`) and keep the Evidence queries to selects and filters. **Why:** income, spending and savings get one tested, documented definition, and any other tool reading the warehouse adds them up the same way. **Trade-off:** a new metric means a dbt change, not only a dashboard edit.
 - **Decision:** open-source Evidence (`@evidence-dev/evidence`) built to a static site. **Why:** it deploys anywhere static files go, with no account or server, and builds in CI on the same synthetic warehouse. **Trade-off:** Evidence's project template now points to its hosted product, Evidence Studio, which has a different syntax; moving there later would mean rewriting the pages.

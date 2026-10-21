@@ -88,8 +88,9 @@ category is in no list.
 {% enddocs %}
 
 {% docs amount %}
-Amount as typed. Positive except card adjustments, which are negative (a
-discount on the card bill).
+Amount as typed. Credits are never negative. A negative debit is a refund or
+discount (an estorno, a discount for paying installments early), and so is a
+card adjustment (a discount on the card bill).
 {% enddocs %}
 
 {% docs payment_method %}
@@ -164,7 +165,8 @@ Highest installment number the workbooks hold for the purchase.
 <!-- Portfolio -->
 
 {% docs snapshot_id %}
-Surrogate key of (reference_date, bank, asset).
+Surrogate key of (reference_date, bank, asset, maturity_date): two lots
+of the same product differ only by their maturity date.
 {% enddocs %}
 
 {% docs reference_date %}
@@ -229,6 +231,11 @@ Projected return at maturity, as computed in the sheet.
 
 {% docs owner_key %}
 Surrogate key of the owner.
+{% enddocs %}
+
+{% docs display_name %}
+Label the dashboard shows. The placeholder itself unless a local run maps it
+to a real name through env var `DISPLAY_NAMES` (macro `display_name`).
 {% enddocs %}
 
 {% docs owner %}

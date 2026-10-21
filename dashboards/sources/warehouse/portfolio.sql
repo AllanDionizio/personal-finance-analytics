@@ -7,5 +7,8 @@ select
     asset_class,
     gross_value,
     allocation_pct,
-    maturity_date
+    maturity_date,
+    is_liquid,
+    withdrawal_order,
+    liquidity_note
 from marts.fct_portfolio_snapshots

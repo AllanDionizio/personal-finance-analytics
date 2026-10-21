@@ -37,14 +37,21 @@ unit_tests:
 
   - name: test_monthly_cashflow_counts_closed_months_only
     description: >
-      The as-of month is March 2026, so only January and February are closed. The investment
-      contribution is not spending, the unpaid March bill is left out with its month, and the
-      asset sale is cash in but not income.
+      Today is March 2026, so only January and February are closed, even though a June
+      row is already marked settled (a card installment on a future bill). The investment
+      contributions are not spending, and both count as invested, the one left at 'Não'
+      too. The unpaid March bill is left out with its month, and the asset sale is cash in
+      but not income.
     model: fct_monthly_cashflow
+    overrides:
+      vars:
+        as_of_date: "2026-03-10"
+        new_money_source: contributions
     given:
       - input: ref('stg_transactions')
         rows:
           - {budget_month: "2026-03-01", is_settled: true}
+          - {budget_month: "2026-06-01", is_settled: true}
       - input: ref('fct_transactions')
         rows:
           - {budget_month: "2026-01-01", side: "credit", category_key: "inc", amount: 1000, effective_amount: 1000, is_settled: true, is_investment_contribution: false, is_dividend: false}
@@ -52,6 +59,7 @@ unit_tests:
           - {budget_month: "2026-02-01", side: "credit", category_key: "sale", amount: 5000, effective_amount: 5000, is_settled: true, is_investment_contribution: false, is_dividend: false}
           - {budget_month: "2026-01-01", side: "debit", category_key: "fix", amount: 300, effective_amount: 300, is_settled: true, is_investment_contribution: false}
           - {budget_month: "2026-01-01", side: "debit", category_key: "inv", amount: 200, effective_amount: 0, is_settled: true, is_investment_contribution: true}
+          - {budget_month: "2026-02-01", side: "debit", category_key: "inv", amount: 100, effective_amount: 0, is_settled: false, is_investment_contribution: true}
           - {budget_month: "2026-02-01", side: "debit", category_key: "var", amount: 50, effective_amount: 50, is_settled: true, is_investment_contribution: false}
           - {budget_month: "2026-02-01", side: "debit", category_key: "unknown", amount: 10, effective_amount: 10, is_settled: true, is_investment_contribution: false}
           - {budget_month: "2026-03-01", side: "debit", category_key: "fix", amount: 300, effective_amount: 0, is_settled: false, is_investment_contribution: false}
@@ -66,33 +74,74 @@ unit_tests:
           - {category_key: "unknown", macro_category: "Unknown"}
     expect:
       rows:
-        - {budget_month: "2026-01-01", income: 1040, non_operating_income: 0, dividends: 40, spending: 300, fixed_spending: 300, variable_spending: 0, unclassified_spending: 0, invested: 200, savings: 740}
-        - {budget_month: "2026-02-01", income: 0, non_operating_income: 5000, dividends: 0, spending: 60, fixed_spending: 0, variable_spending: 50, unclassified_spending: 10, invested: 0, savings: -60}
+        - {budget_month: "2026-01-01", income: 1040, non_operating_income: 0, dividends: 40, spending: 300, fixed_spending: 300, variable_spending: 0, unclassified_spending: 0, invested: 200, savings: 740, new_money: 200}
+        - {budget_month: "2026-02-01", income: 0, non_operating_income: 5000, dividends: 0, spending: 60, fixed_spending: 0, variable_spending: 50, unclassified_spending: 10, invested: 100, savings: -60, new_money: 100}
+
+  - name: test_monthly_cashflow_new_money_from_savings
+    description: >
+      When the investment rows also book reinvested redemptions, new money is the month's
+      savings plus asset sales minus dividends: 1,000 - 300 in January, whatever was
+      invested, and in February a 5,000 sale minus 60 of spending.
+    model: fct_monthly_cashflow
+    overrides:
+      vars:
+        as_of_date: "2026-03-10"
+        new_money_source: savings
+    given:
+      - input: ref('stg_transactions')
+        rows:
+          - {budget_month: "2026-03-01", is_settled: true}
+      - input: ref('fct_transactions')
+        rows:
+          - {budget_month: "2026-01-01", side: "credit", category_key: "inc", amount: 1000, effective_amount: 1000, is_settled: true, is_investment_contribution: false, is_dividend: false}
+          - {budget_month: "2026-01-01", side: "debit", category_key: "fix", amount: 300, effective_amount: 300, is_settled: true, is_investment_contribution: false}
+          - {budget_month: "2026-01-01", side: "debit", category_key: "inv", amount: 4000, effective_amount: 0, is_settled: false, is_investment_contribution: true}
+          - {budget_month: "2026-02-01", side: "credit", category_key: "sale", amount: 5000, effective_amount: 5000, is_settled: true, is_investment_contribution: false, is_dividend: false}
+          - {budget_month: "2026-02-01", side: "debit", category_key: "fix", amount: 60, effective_amount: 60, is_settled: true, is_investment_contribution: false}
+      - input: ref('dim_category')
+        rows:
+          - {category_key: "inc", macro_category: null, is_operating: true}
+          - {category_key: "sale", macro_category: null, is_operating: false}
+          - {category_key: "fix", macro_category: "Fixed"}
+          - {category_key: "inv", macro_category: "Not applicable"}
+    expect:
+      rows:
+        - {budget_month: "2026-01-01", invested: 4000, savings: 700, new_money: 700}
+        - {budget_month: "2026-02-01", invested: 0, savings: -60, new_money: 4940}
 
   - name: test_net_worth_returns_flows_and_reserve
     description: >
-      Three snapshots. The February period has a 1,000 contribution and a 50 dividend: gain
-      10,650 - 9,500 - 1,000 + 50 = 200 over 9,500 + 500 = 10,000, a 2% modified Dietz return.
-      March has no flows: 213 over 10,650, 2% again; the contribution dated after the March
-      snapshot belongs to the next period. The reserve (cash plus fixed income with no
-      maturity) needs 12 closed months of spending: February has 11, March has 12, and 1,200
-      of reserve is 12 months of fixed spending, the top of the band.
+      Four snapshots. The February period has a 1,000 contribution, counted although it
+      isn't settled (the sheets leave contributions at 'Não'), and a 50 dividend; the
+      unsettled dividend is left out. Gain 10,650 - 9,500 - 1,000 + 50 = 200 over
+      9,500 + 500 = 10,000, a 2% modified Dietz return. March has no flows: 213 over 10,650,
+      2% again; the contribution dated after the March snapshot belongs to April, which
+      gains nothing. The reserve (cash plus fixed income with no maturity) needs 12 closed
+      months of spending: February has 11, March has 12, and 1,200 of reserve is 6 months
+      of spending, the bottom of the band. April isn't closed, so its snapshot uses the
+      12 months through March.
     model: fct_net_worth
+    overrides:
+      vars:
+        new_money_source: contributions
     given:
       - input: ref('fct_portfolio_snapshots')
         rows:
-          - {reference_date: "2026-01-20", asset_class: "Cash", gross_value: 500, maturity_date: null}
-          - {reference_date: "2026-01-20", asset_class: "Fixed income", gross_value: 9000, maturity_date: "2030-01-01"}
-          - {reference_date: "2026-02-20", asset_class: "Cash", gross_value: 1150, maturity_date: null}
-          - {reference_date: "2026-02-20", asset_class: "Fixed income", gross_value: 9500, maturity_date: "2030-01-01"}
-          - {reference_date: "2026-03-20", asset_class: "Cash", gross_value: 1000, maturity_date: null}
-          - {reference_date: "2026-03-20", asset_class: "Fixed income", gross_value: 200, maturity_date: null}
-          - {reference_date: "2026-03-20", asset_class: "Fixed income", gross_value: 9663, maturity_date: "2030-01-01"}
+          - {reference_date: "2026-01-20", asset_class: "Cash", gross_value: 500, maturity_date: null, is_liquid: true}
+          - {reference_date: "2026-01-20", asset_class: "Fixed income", gross_value: 9000, maturity_date: "2030-01-01", is_liquid: false}
+          - {reference_date: "2026-02-20", asset_class: "Cash", gross_value: 1150, maturity_date: null, is_liquid: true}
+          - {reference_date: "2026-02-20", asset_class: "Fixed income", gross_value: 9500, maturity_date: "2030-01-01", is_liquid: false}
+          - {reference_date: "2026-03-20", asset_class: "Cash", gross_value: 1000, maturity_date: null, is_liquid: true}
+          - {reference_date: "2026-03-20", asset_class: "Fixed income", gross_value: 200, maturity_date: null, is_liquid: true}
+          - {reference_date: "2026-03-20", asset_class: "Fixed income", gross_value: 9663, maturity_date: "2030-01-01", is_liquid: false}
+          - {reference_date: "2026-04-10", asset_class: "Cash", gross_value: 1000, maturity_date: null, is_liquid: true}
+          - {reference_date: "2026-04-10", asset_class: "Fixed income", gross_value: 200, maturity_date: null, is_liquid: true}
+          - {reference_date: "2026-04-10", asset_class: "Fixed income", gross_value: 10363, maturity_date: "2030-01-01", is_liquid: false}
       - input: ref('fct_transactions')
         rows:
-          - {transaction_date: "2026-02-10", budget_month: "2026-02-01", amount: 1000, is_settled: true, is_investment_contribution: true, is_dividend: false}
+          - {transaction_date: "2026-02-10", budget_month: "2026-02-01", amount: 1000, is_settled: false, is_investment_contribution: true, is_dividend: false}
           - {transaction_date: "2026-02-15", budget_month: "2026-02-01", amount: 50, is_settled: true, is_investment_contribution: false, is_dividend: true}
-          - {transaction_date: "2026-02-18", budget_month: "2026-02-01", amount: 300, is_settled: false, is_investment_contribution: true, is_dividend: false}
+          - {transaction_date: "2026-02-18", budget_month: "2026-02-01", amount: 300, is_settled: false, is_investment_contribution: false, is_dividend: true}
           - {transaction_date: "2026-03-25", budget_month: "2026-03-01", amount: 700, is_settled: true, is_investment_contribution: true, is_dividend: false}
       - input: ref('fct_inflation_monthly')
         rows:
@@ -117,4 +166,140 @@ unit_tests:
       rows:
         - {reference_date: "2026-01-20", total_value: 9500, liquid_reserve: 500, contributions: null, dividends: null, period_return: null, reserve_months: null, runway_months: null, reserve_status: null}
         - {reference_date: "2026-02-20", total_value: 10650, liquid_reserve: 1150, contributions: 1000, dividends: 50, period_return: 0.02, reserve_months: null, runway_months: null, reserve_status: null}
-        - {reference_date: "2026-03-20", total_value: 10863, liquid_reserve: 1200, contributions: 0, dividends: 0, period_return: 0.02, reserve_months: 12, runway_months: 54.315, reserve_status: "Within target"}
+        - {reference_date: "2026-03-20", total_value: 10863, liquid_reserve: 1200, contributions: 0, dividends: 0, period_return: 0.02, reserve_months: 6, runway_months: 54.315, reserve_status: "Within target"}
+        - {reference_date: "2026-04-10", total_value: 11563, liquid_reserve: 1200, contributions: 700, dividends: 0, period_return: 0, reserve_months: 6, runway_months: 57.815, reserve_status: "Within target"}
+
+  - name: test_net_worth_new_money_from_savings
+    description: >
+      New money comes from the closed months' savings plus asset sales minus dividends, at
+      mid-month. In February 600 came in, and the 50 of dividends are already in the
+      account: gain 10,703 - 10,000 - 600 = 103 over 10,000 + 300, a 1% return. March spent 200 more than it earned, a withdrawal, and the
+      portfolio fell by exactly that: no gain. April isn't closed, so the April snapshot
+      has neither new money nor a return. The recorded contribution is ignored.
+    model: fct_net_worth
+    overrides:
+      vars:
+        new_money_source: savings
+    given:
+      - input: ref('fct_portfolio_snapshots')
+        rows:
+          - {reference_date: "2026-01-31", asset_class: "Cash", gross_value: 1000, maturity_date: null, is_liquid: true}
+          - {reference_date: "2026-01-31", asset_class: "Fixed income", gross_value: 9000, maturity_date: "2030-01-01", is_liquid: false}
+          - {reference_date: "2026-02-28", asset_class: "Cash", gross_value: 1703, maturity_date: null, is_liquid: true}
+          - {reference_date: "2026-02-28", asset_class: "Fixed income", gross_value: 9000, maturity_date: "2030-01-01", is_liquid: false}
+          - {reference_date: "2026-03-31", asset_class: "Cash", gross_value: 1503, maturity_date: null, is_liquid: true}
+          - {reference_date: "2026-03-31", asset_class: "Fixed income", gross_value: 9000, maturity_date: "2030-01-01", is_liquid: false}
+          - {reference_date: "2026-04-20", asset_class: "Cash", gross_value: 1500, maturity_date: null, is_liquid: true}
+          - {reference_date: "2026-04-20", asset_class: "Fixed income", gross_value: 9000, maturity_date: "2030-01-01", is_liquid: false}
+      - input: ref('fct_transactions')
+        rows:
+          - {transaction_date: "2026-02-10", budget_month: "2026-02-01", amount: 5000, is_settled: false, is_investment_contribution: true, is_dividend: false}
+      - input: ref('fct_inflation_monthly')
+        rows:
+          - {month: "2026-02-01", ipca_rate: 0.004}
+          - {month: "2026-03-01", ipca_rate: 0.003}
+      - input: ref('fct_monthly_cashflow')
+        rows:
+          - {budget_month: "2026-01-01", new_money: 900, dividends: 0, spending: 200, fixed_spending: 100}
+          - {budget_month: "2026-02-01", new_money: 600, dividends: 50, spending: 200, fixed_spending: 100}
+          - {budget_month: "2026-03-01", new_money: -200, dividends: 0, spending: 400, fixed_spending: 100}
+    expect:
+      rows:
+        - {reference_date: "2026-01-31", contributions: null, dividends: null, period_gain: null, period_return: null}
+        - {reference_date: "2026-02-28", contributions: 600, dividends: 50, period_gain: 103, period_return: 0.01}
+        - {reference_date: "2026-03-31", contributions: -200, dividends: 0, period_gain: 0, period_return: 0}
+        - {reference_date: "2026-04-20", contributions: null, dividends: null, period_gain: null, period_return: null}
+
+  - name: test_goals_targets_pace_and_reserve
+    description: >
+      A cost of living of 1,000 a month (the average spending, with no override) withdrawn
+      at 50% a year needs 24,000. With 10,000 today, 5% a year above inflation and the
+      current 500 a month, the target is reached in 25 months, April 2028. The new money
+      goal started in January 2025 at 100 and rose by 50 in January 2026; independence needs
+      about 224 a month, above it, so the goal stands. The reserve goal is 6 months of
+      spending, 6,000; 3,000 is halfway.
+    model: fct_goals
+    overrides:
+      vars:
+        as_of_date: "2026-03-20"
+        fi_target_month: "2030-03-01"
+        fi_monthly_spending: ""
+        fi_withdrawal_rate: 0.5
+        fi_real_return: 0.05
+        new_money_goal_from: "2025-01-01"
+        new_money_goal_start: "100"
+        new_money_goal_step: "50"
+    given:
+      - input: ref('fct_net_worth')
+        rows:
+          - {reference_date: "2026-01-20", total_value: 8000, liquid_reserve: 100, avg_monthly_spending: null}
+          - {reference_date: "2026-03-15", total_value: 10000, liquid_reserve: 3000, avg_monthly_spending: 1000}
+      - input: ref('fct_monthly_cashflow')
+        rows:
+          - {budget_month: "2026-01-01", spending: 900, new_money: 400}
+          - {budget_month: "2026-02-01", spending: 1100, new_money: 600}
+    expect:
+      rows:
+        - {as_of_date: "2026-03-15", projection_from: "2026-03-01", wealth: 10000, fi_monthly_spending: 1000, fi_target_value: 24000, months_to_target: 48, current_monthly_new_money: 500, projected_fi_month: "2028-04-01", new_money_goal: 150, reserve: 3000, reserve_target: 6000, reserve_progress: 0.5}
+
+  - name: test_goal_tracking_months_prices_and_goal
+    description: >
+      One row per month from the first snapshot to the target month. A month's value is its
+      last snapshot, brought to today's prices: January's 1,000 at an index of 100 is 1,100
+      at today's 110. March has no index yet and takes the newest. The new money goal starts
+      in February at 200.
+    model: fct_goal_tracking
+    overrides:
+      vars:
+        new_money_goal_from: "2026-02-01"
+        new_money_goal_start: "200"
+        new_money_goal_step: "100"
+    given:
+      - input: ref('fct_goals')
+        rows:
+          - {projection_from: "2026-02-01", fi_target_month: "2026-04-01", wealth: 1500, fi_target_value: 5000, required_monthly_new_money: 1000, current_monthly_new_money: 350, monthly_return: 0.01}
+      - input: ref('fct_net_worth')
+        rows:
+          - {reference_date: "2026-01-31", total_value: 1000}
+          - {reference_date: "2026-02-10", total_value: 1200}
+          - {reference_date: "2026-02-27", total_value: 1500}
+      - input: ref('fct_inflation_monthly')
+        rows:
+          - {month: "2026-01-01", price_index: 100}
+          - {month: "2026-02-01", price_index: 110}
+      - input: ref('fct_monthly_cashflow')
+        rows:
+          - {budget_month: "2026-01-01", new_money: 300}
+          - {budget_month: "2026-02-01", new_money: 400}
+    expect:
+      rows:
+        - {month: "2026-01-01", wealth_today_money: 1100, new_money: 300, new_money_goal: null}
+        - {month: "2026-02-01", wealth_today_money: 1500, new_money: 400, new_money_goal: 200}
+        - {month: "2026-03-01", wealth_today_money: null, new_money: null, new_money_goal: 200}
+        - {month: "2026-04-01", wealth_today_money: null, new_money: null, new_money_goal: 200}
+
+  - name: test_portfolio_snapshots_liquidity_and_withdrawal_order
+    description: >
+      The cash balance, fixed income with no maturity, a name with "Liq. Diária" and a
+      holding listed in var liquid_assets have daily liquidity; a Tesouro bond with a
+      maturity doesn't. The cash balance is withdrawn first, then the listed holdings in
+      their order, then the rest, largest first.
+    model: fct_portfolio_snapshots
+    overrides:
+      vars:
+        liquid_assets: '[{"match": "Savings box%", "note": "Earns less if withdrawn within a year"}]'
+    given:
+      - input: ref('stg_portfolio_snapshots')
+        rows:
+          - {snapshot_id: "a", reference_date: "2026-01-31", asset: "Saldo (CDI 100%)", asset_class: "Cash", gross_value: 100, maturity_date: null}
+          - {snapshot_id: "b", reference_date: "2026-01-31", asset: "CDB 110% CDI Liq. Diária", asset_class: "Fixed income", gross_value: 300, maturity_date: "2028-01-01"}
+          - {snapshot_id: "c", reference_date: "2026-01-31", asset: "Savings box 120%", asset_class: "Fixed income", gross_value: 50, maturity_date: "2027-01-01"}
+          - {snapshot_id: "d", reference_date: "2026-01-31", asset: "Tesouro IPCA+ 2035", asset_class: "Fixed income", gross_value: 1000, maturity_date: "2035-05-15"}
+          - {snapshot_id: "e", reference_date: "2026-01-31", asset: "Fundo Renda Fixa Alfa", asset_class: "Fixed income", gross_value: 200, maturity_date: null}
+    expect:
+      rows:
+        - {snapshot_id: "a", is_liquid: true, withdrawal_order: 1, liquidity_note: null}
+        - {snapshot_id: "b", is_liquid: true, withdrawal_order: 3, liquidity_note: null}
+        - {snapshot_id: "c", is_liquid: true, withdrawal_order: 2, liquidity_note: "Earns less if withdrawn within a year"}
+        - {snapshot_id: "d", is_liquid: false, withdrawal_order: null, liquidity_note: null}
+        - {snapshot_id: "e", is_liquid: true, withdrawal_order: 4, liquidity_note: null}
