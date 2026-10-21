@@ -168,7 +168,7 @@ order by month
     xFmt="mm/yyyy"
 />
 
-Renda menos gastos, mês a mês. O superávit é o que paga os aportes da página [Carteira](/carteira).
+Renda menos gastos, mês a mês. O superávit é o dinheiro novo que entra na [carteira](/carteira).
 
 ## O resto da história
 
@@ -177,7 +177,7 @@ Renda menos gastos, mês a mês. O superávit é o que paga os aportes da págin
 - **[Receitas](/receitas)** De onde vem o dinheiro, e quanto é salário, remuneração variável ou proventos
 - **[Gastos](/gastos)** Para onde ele vai, o que mudou no último ano e se os gastos crescem mais que a renda e a inflação
 - **[Parcelas](/parcelas)** Quanto do futuro já está comprometido
-- **[Carteira](/carteira)** Se a carteira cresce por aportes ou por rendimento, e se ganha da inflação
+- **[Carteira](/carteira)** Se a carteira cresce por dinheiro novo ou por rendimento, e se ganha da inflação
 
 </div>
 

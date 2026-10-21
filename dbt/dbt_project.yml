@@ -14,6 +14,11 @@ vars:
   # Liquid reserve target, in months of fixed spending (fct_net_worth)
   reserve_min_months: 6
   reserve_max_months: 12
+  # Where the portfolio's new money comes from (fct_monthly_cashflow.new_money).
+  # 'contributions': every investment row is new money, as in the synthetic
+  # workbooks. 'savings': the investment rows also book money reinvested from
+  # redemptions, so new money is the month's savings plus asset sales.
+  new_money_source: "{{ env_var('NEW_MONEY_SOURCE', 'contributions') }}"
 
 models:
   personal_finance:

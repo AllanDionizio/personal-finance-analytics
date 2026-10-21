@@ -181,7 +181,7 @@ on debits and `payment_method_key` on credits, which a test enforces.
 | `dim_payment_method` | one row per payment method | `payment_method_key`, `payment_method`, `method_type` (`'credit_card'` / `'other'`), `source_color` |
 | `fct_transactions` | one row per transaction | `transaction_id`; FKs to the dims for `transaction_date`, `budget_month`, category, owner, payment method; `purchase_id` for installments; `amount`, `effective_amount` (amount if effective, else 0), `signed_effective_amount` (+ credits, − debits); the flags and installment columns of staging |
 | `fct_installments` | one row per installment of every purchase | `installment_id`, `purchase_id`, `installment_number`, `budget_month`, `transaction_id` (NULL outside the workbooks), `amount`, `outstanding_amount`, `is_recorded`, `is_settled` (6.9) |
-| `fct_monthly_cashflow` | one row per closed budget month (6.10) | `budget_month`, `income` (operating), `non_operating_income`, `dividends`, `spending`, `fixed_spending`, `variable_spending`, `unclassified_spending`, `invested`, `savings` (`income − spending`) |
+| `fct_monthly_cashflow` | one row per closed budget month (6.10) | `budget_month`, `income` (operating), `non_operating_income`, `dividends`, `spending`, `fixed_spending`, `variable_spending`, `unclassified_spending`, `invested`, `savings` (`income − spending`), `new_money` |
 | `fct_net_worth` | one row per portfolio snapshot (6.11) | `reference_date`, `total_value`, `liquid_reserve`, `contributions`, `dividends`, `period_return`, `period_inflation`, `return_12m`, `inflation_12m`, `real_return_12m`, the same year to date, `runway_months`, `reserve_months`, `reserve_status` |
 | `fct_inflation_monthly` | one row per month (6.12) | `month`, `ipca_pct`, `ipca_rate`, `price_index`, `ipca_12m`, `ipca_ytd` |
 | `fct_portfolio_snapshots` | one row per asset per reference date | `snapshot_id` (`hash(reference_date\|bank\|asset\|maturity_date)`), `reference_date`, `bank`, `asset`, `asset_class` (`'Real estate fund'` / `'Fixed income'` / `'Multimarket fund'` / `'Crypto'` / `'Cash'` / `'Other'`), `gross_value`, `allocation_pct`, `maturity_date`, `mom`, `yoy` |
@@ -414,19 +414,33 @@ them up the same way:
   sheets leave them at `'Não'` so the workbook's own report doesn't count
   them as spending. **Savings**: income −
   spending, i.e. what was invested plus what stayed in the account.
+- **New money**: what entered the household's wealth from outside the
+  portfolio, by var `new_money_source`. `'contributions'` (the default, and
+  the synthetic workbooks): `invested`. `'savings'` (`make real`): the real
+  workbooks also book money reinvested from a redemption as a contribution,
+  so `invested` overstates it; new money is savings plus non-operating
+  income minus dividends, which the portfolio earned.
 
 ### 6.11 Portfolio return and liquid reserve
 
 `fct_net_worth` has one row per snapshot:
 
-- **External flows**: the investment contributions dated after the
-  previous snapshot, up to this one, whatever their status (the sheets
-  leave them at `'Não'`; a row without a date counts at mid-month). The workbooks record contributions only: a maturing asset is
-  reinvested inside the portfolio and books nothing, and a withdrawal to
-  spend isn't recorded, which understates that period's return.
+- **External flows** (`contributions`), by var `new_money_source`:
+  - `'contributions'`: the investment contributions dated after the
+    previous snapshot, up to this one, whatever their status (a row without
+    a date counts at mid-month). A maturing asset is reinvested inside the
+    portfolio and books nothing, and a withdrawal to spend isn't recorded,
+    which understates that period's return. Dividends are paid outside the
+    portfolio, so they are added back as return.
+  - `'savings'`: the `new_money` of each closed month whose midpoint falls
+    in the period. A month that spends more than it earns is a withdrawal.
+    Dividends land in the account the portfolio tracks, so they are already
+    in its value. A period that reaches a month not closed yet has no
+    flows and no return until that month closes. FGTS deposits aren't in
+    the workbooks, so they show up as return.
 - **Return of a period** (modified Dietz): `(value − previous value −
-  contributions + dividends) / (previous value + contributions / 2)`.
-  Dividends are paid into the account, so they count as return.
+  contributions [+ dividends paid outside]) / (previous value +
+  contributions / 2)`.
 - **Against inflation**: IPCA is compounded over the months of each period
   (after the previous snapshot's month, up to this one's), then returns and
   inflation are chained over the last 12 periods and over the year, and
@@ -461,7 +475,7 @@ and the 12-month and year-to-date rates, compounded from the monthly ones.
 11. **Past installments** → always paid in `fct_installments`, whatever the sheet says
 12. **Dashboard metrics** → defined in `fct_monthly_cashflow`, over closed months only; Evidence only selects and filters
 13. **Money from selling an asset** → non-operating income, outside income and the savings rate
-14. **Portfolio return** → modified Dietz, recorded contributions as the only external flow, dividends as return; compared with IPCA over the same periods
+14. **Portfolio return** → modified Dietz, with new money as the only external flow (the recorded contributions, or the savings where contributions also book reinvestments), dividends as return; compared with IPCA over the same periods
 15. **Liquid reserve** → cash plus fixed income with no maturity; target 6 to 12 months of fixed spending
 
 ## 8. Bugs found with the synthetic data (fixed)

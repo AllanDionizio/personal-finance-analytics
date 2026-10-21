@@ -3,12 +3,18 @@
 -- inflation over the same periods, so "did we beat inflation?" compares like
 -- with like.
 --
--- External flows are the recorded investment contributions only, whatever
--- their OK column says (the sheets leave them at 'Não'). In the
--- workbooks a maturing asset is reinvested inside the portfolio and books
--- nothing; a withdrawal to spend isn't recorded either, which understates
--- that period's return (it never overstates it). Dividends are paid into the
--- account, so they count as return on top of the change in value.
+-- External flows are the household's new money (var new_money_source). With
+-- 'contributions', they are the recorded investment contributions, whatever
+-- their OK column says (the sheets leave them at 'Não'): a maturing asset
+-- is reinvested inside the portfolio and books nothing, and a withdrawal to
+-- spend isn't recorded, which understates that period's return (it never
+-- overstates it), and dividends are paid outside the portfolio, so they
+-- count as return on top of the change in value. With 'savings', they are
+-- each closed month's new money (savings plus asset sales, dividends
+-- excluded), at mid-month: a month that spends more than it earns is a
+-- withdrawal, dividends land in the account the portfolio tracks, so they
+-- are already in its value, and a period that reaches a month not closed yet
+-- has no return.
 --
 -- period_return is the modified Dietz return: the gain over the average
 -- capital, with contributions counted for half the period. Returns and
@@ -17,6 +23,7 @@
 -- The liquid reserve is the cash balance plus fixed income with no maturity
 -- date (daily liquidity), measured in months of fixed spending against the
 -- target band in the project vars reserve_min_months / reserve_max_months.
+
 
 with
 
@@ -44,7 +51,7 @@ periods as (
 
 ),
 
-flows as (
+flows_from_contributions as (
 
     -- A flow without a date counts at mid-month of its budget month.
     select
@@ -54,7 +61,8 @@ flows as (
         ), 0) as contributions,
         coalesce(sum(facts.amount) filter (
             where facts.is_dividend
-        ), 0) as dividends
+        ), 0) as dividends,
+        true as is_complete
     from periods
     left join {{ ref('fct_transactions') }} as facts
         on
@@ -69,6 +77,52 @@ flows as (
                 facts.transaction_date, facts.budget_month + 14
             ) <= periods.reference_date
     group by periods.reference_date
+
+),
+
+last_closed as (
+
+    select max(budget_month) as last_month
+    from {{ ref('fct_monthly_cashflow') }}
+
+),
+
+flows_from_savings as (
+
+    -- Each closed month counts at its midpoint. The period is complete while
+    -- no month after the last closed one has its midpoint inside it.
+    select
+        periods.reference_date,
+        coalesce(sum(cashflow.new_money), 0) as contributions,
+        coalesce(sum(cashflow.dividends), 0) as dividends,
+        periods.reference_date
+        < cast(any_value(last_closed.last_month) + interval 1 month as date) + 14
+            as is_complete
+    from periods
+    cross join last_closed
+    left join {{ ref('fct_monthly_cashflow') }} as cashflow
+        on
+            cashflow.budget_month + 14 > periods.previous_date
+            and cashflow.budget_month + 14 <= periods.reference_date
+    group by periods.reference_date
+
+),
+
+flows as (
+
+    -- Dividends paid outside the portfolio are added back as return; with
+    -- savings they land in the account the portfolio tracks.
+    select
+        *,
+        dividends as dividends_outside
+    from flows_from_contributions
+    where '{{ var("new_money_source") }}' = 'contributions'
+    union all
+    select
+        *,
+        0 as dividends_outside
+    from flows_from_savings
+    where '{{ var("new_money_source") }}' = 'savings'
 
 ),
 
@@ -129,13 +183,27 @@ returns as (
         periods.total_value,
         periods.liquid_reserve,
         periods.previous_value,
-        case when periods.previous_date is not null then flows.contributions end
-            as contributions,
-        case when periods.previous_date is not null then flows.dividends end as dividends,
-        periods.total_value - periods.previous_value - flows.contributions + flows.dividends
-            as period_gain,
-        (periods.total_value - periods.previous_value - flows.contributions + flows.dividends)
-        / nullif(periods.previous_value + 0.5 * flows.contributions, 0) as period_return,
+        case
+            when periods.previous_date is not null and flows.is_complete
+                then flows.contributions
+        end as contributions,
+        case
+            when periods.previous_date is not null and flows.is_complete
+                then flows.dividends
+        end as dividends,
+        case
+            when flows.is_complete then
+                periods.total_value - periods.previous_value - flows.contributions
+                + flows.dividends_outside
+        end as period_gain,
+        case
+            when flows.is_complete then
+                (
+                    periods.total_value - periods.previous_value - flows.contributions
+                    + flows.dividends_outside
+                )
+                / nullif(periods.previous_value + 0.5 * flows.contributions, 0)
+        end as period_return,
         case
             when inflation.months_expected = 0 then 0
             when inflation.months_found = inflation.months_expected then inflation.compounded

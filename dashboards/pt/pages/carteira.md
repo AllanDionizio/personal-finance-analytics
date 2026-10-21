@@ -5,7 +5,7 @@ sidebar_position: 5
 
 <!-- Tradução de dashboards/pages/portfolio.md: uma mudança lá vale aqui também -->
 
-A aba de carteira é um registro de snapshots: em uma data de referência, o valor de cada ativo. Cada planilha anual repete o registro inteiro, então o dbt guarda uma cópia de cada snapshot, a da planilha mais recente. Esta página responde duas perguntas: a carteira cresce por **aportes** ou por **rendimento**, e o rendimento **ganha da inflação**?
+A aba de carteira é um registro de snapshots: em uma data de referência, o valor de cada ativo. Cada planilha anual repete o registro inteiro, então o dbt guarda uma cópia de cada snapshot, a da planilha mais recente. Esta página responde duas perguntas: a carteira cresce por **dinheiro novo** ou por **rendimento**, e o rendimento **ganha da inflação**?
 
 ```sql worth
 -- Snapshot mais recente primeiro (o BigValue mostra a primeira linha). Meio-dia
@@ -65,7 +65,7 @@ order by reference_date desc
 
 </div>
 
-## Aportes ou rendimento?
+## Dinheiro novo ou rendimento?
 
 ```sql growth
 select
@@ -80,7 +80,7 @@ order by reference_date
 ```sql growth_long
 select snapshot_at, 'Valor da carteira' as measure, total_value as amount from ${growth}
 union all
-select snapshot_at, 'Valor inicial + aportes' as measure, invested_capital as amount from ${growth}
+select snapshot_at, 'Valor inicial + dinheiro novo' as measure, invested_capital as amount from ${growth}
 order by snapshot_at, measure
 ```
 
@@ -102,14 +102,14 @@ from warehouse.net_worth
     x=snapshot_at
     y=amount
     series=measure
-    seriesOrder={['Valor da carteira', 'Valor inicial + aportes']}
-    seriesColors={{'Valor da carteira': ['#5650d6', '#8a85f0'], 'Valor inicial + aportes': ['#7b8491', '#5f6873']}}
+    seriesOrder={['Valor da carteira', 'Valor inicial + dinheiro novo']}
+    seriesColors={{'Valor da carteira': ['#5650d6', '#8a85f0'], 'Valor inicial + dinheiro novo': ['#7b8491', '#5f6873']}}
     yFmt=brl0k
     xFmt="mm/yyyy"
 />
 
 <!-- fmt() em vez de <Value>: o Value deixa um espaço antes da pontuação que vem depois -->
-Desde {growth_split[0]?.since}, entraram {fmt(growth_split[0]?.contributions, 'brl0')} em aportes e a carteira rendeu {fmt(growth_split[0]?.gains, 'brl0')} além disso (incluindo os proventos pagos na conta): de tudo o que a carteira ganhou, {fmt(growth_split[0]?.gains_share, 'pct0')} veio do rendimento. A distância entre as duas linhas é o que o mercado acrescentou; os proventos são pagos fora, então ficam fora dela.
+Desde {growth_split[0]?.since}, entraram {fmt(growth_split[0]?.contributions, 'brl0')} de dinheiro novo e a carteira rendeu {fmt(growth_split[0]?.gains, 'brl0')} além disso, proventos incluídos: de tudo o que a carteira ganhou, {fmt(growth_split[0]?.gains_share, 'pct0')} veio do rendimento. A distância entre as duas linhas é esse rendimento.
 
 ## Ganhou da inflação?
 
@@ -188,7 +188,7 @@ order by snapshot_at, measure
     title="Acumulado em 12 meses"
 />
 
-O objetivo é ganho real: render mais que a inflação, para o dinheiro comprar mais a cada ano. O retorno de cada período entre dois snapshots é o ganho sobre o capital médio, com os aportes contando por metade do período (Dietz modificado), e a inflação é composta nos mesmos períodos. Resgates não são lançados nas planilhas, então um período com resgate mostraria um retorno menor do que teve, nunca maior.
+O objetivo é ganho real: render mais que a inflação, para o dinheiro comprar mais a cada ano. O retorno de cada período entre dois snapshots é o ganho sobre o capital médio, com o dinheiro novo contando por metade do período (Dietz modificado), e a inflação é composta nos mesmos períodos. O dinheiro novo vem da poupança de cada mês fechado, então um mês que gasta mais do que ganha conta como resgate, e o período que chega ao mês corrente fica sem retorno até o mês fechar. Os depósitos do FGTS não são lançados nas planilhas, então aparecem como rendimento.
 
 ## Reserva de liquidez
 

@@ -75,7 +75,7 @@ LOAD_REAL_ENV := set -a; if [ -f .env.real ]; then . ./.env.real; fi; set +a;
 
 real: deps
 	python -m ingestion.extract_sheets --xlsx-dir data/raw --db $(REAL_DB)
-	$(LOAD_REAL_ENV) cd dbt && DUCKDB_PATH=$(REAL_DB) dbt build
+	$(LOAD_REAL_ENV) cd dbt && DUCKDB_PATH=$(REAL_DB) NEW_MONEY_SOURCE=savings dbt build
 
 real-dashboard:
 	$(MAKE) dashboard-dev-pt WAREHOUSE=real.duckdb

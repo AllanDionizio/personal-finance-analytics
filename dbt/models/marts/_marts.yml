@@ -358,9 +358,18 @@ models:
       - name: invested
         description: >
           Debits into investments, whatever their status (the sheets leave them at 'Não'): the
-          money left out of spending.
+          money left out of spending. Includes reinvested redemptions where the workbooks book
+          them (see new_money).
       - name: savings
         description: income - spending, i.e. what was invested plus what stayed in the account.
+      - name: new_money
+        description: >
+          What the household added to its wealth (var new_money_source): invested, when every
+          investment row is new money; savings plus non_operating_income, when the investment
+          rows also book money reinvested from redemptions, minus dividends (the portfolio
+          earned them).
+        data_tests:
+          - not_null
     data_tests:
       - dbt_utils.expression_is_true:
           arguments:
@@ -432,15 +441,19 @@ models:
           - not_null
       - name: contributions
         description: >
-          Investment contributions dated after the previous snapshot, up to this one, whatever
-          their status (the sheets leave them at 'Não'). The only external flow the workbooks
-          record. NULL for the first snapshot.
+          New money that came in after the previous snapshot, up to this one: the investment
+          contributions, whatever their status, or the closed months' new_money when var
+          new_money_source is 'savings' (negative when the period spent more than it earned).
+          NULL for the first snapshot, and with 'savings' for a period that reaches a month
+          not closed yet.
       - name: dividends
         description: >
-          Settled dividends paid in the same window, counted as return. NULL for the first
-          snapshot.
+          Settled dividends paid in the same window, counted as return. NULL like
+          contributions.
       - name: period_gain
-        description: total_value - previous total_value - contributions + dividends.
+        description: >
+          total_value - previous total_value - contributions, plus the dividends when they are
+          paid outside the portfolio (new_money_source 'contributions').
       - name: period_return
         description: >
           Modified Dietz return of the period: period_gain over the previous value plus half the
@@ -498,7 +511,10 @@ models:
             expression: "liquid_reserve <= total_value"
       - dbt_utils.expression_is_true:
           arguments:
-            expression: "contributions >= 0 and dividends >= 0"
+            # new money from savings is negative in a month that spent more than it earned
+            expression: >-
+              dividends >= 0
+              and (contributions >= 0 or '{{ var("new_money_source") }}' = 'savings')
           config:
             where: "contributions is not null"
 

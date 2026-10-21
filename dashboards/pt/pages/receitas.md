@@ -201,7 +201,7 @@ select
     y.closed_months,
     sum(m.income) as income,
     sum(m.spending) as spending,
-    sum(m.invested) as invested,
+    sum(m.new_money) as new_money,
     sum(m.savings) as savings,
     sum(m.savings) / sum(m.income) as savings_rate,
     sum(m.non_operating_income) as non_operating_income
@@ -217,11 +217,11 @@ order by y.year_label desc
     <Column id=spending fmt=brl0 title="Gastos" />
     <Column id=savings fmt=brl0 title="Poupança" />
     <Column id=savings_rate fmt=pct1 title="Taxa de poupança" />
-    <Column id=invested fmt=brl0 title="Aportes" />
+    <Column id=new_money fmt=brl0 title="Dinheiro novo" />
     <Column id=non_operating_income fmt=brl0 title="Eventual (venda de ativos)" />
 </DataTable>
 
-Poupança é renda menos gastos: o que foi para investimentos mais o que ficou na conta.
+Poupança é renda menos gastos: o que foi para investimentos mais o que ficou na conta. Dinheiro novo é o que entrou no patrimônio vindo de fora da carteira: a poupança mais as vendas de bens, menos os proventos, que a própria carteira rendeu. Os aportes lançados nas planilhas não servem para isso, porque incluem o dinheiro de resgates reinvestido.
 
 ## Dinheiro eventual
 

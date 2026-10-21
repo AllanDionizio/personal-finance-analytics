@@ -95,6 +95,7 @@ select
                 '^(CDB|LCI|LCA|CRI|CRA|CCB|Tesouro|Recebíveis|Fundo Renda Fixa)'
             )
             or clean_asset ilike '%CDI%'
+            or clean_asset ilike '%CDB%'
             then 'Fixed income'
         else 'Other'
     end as asset_class,

@@ -11,6 +11,11 @@
 --
 -- savings = income - spending, i.e. what went into investments plus what
 -- stayed in the account. Investment contributions are not spending.
+--
+-- new_money is what the household added to its wealth from outside the
+-- portfolio: every contribution when the investment rows are all new money,
+-- or, when they also book reinvested redemptions (var new_money_source),
+-- savings plus asset sales minus dividends, which the portfolio earned.
 
 with
 
@@ -78,5 +83,12 @@ select
     coalesce(variable_spending, 0) as variable_spending,
     coalesce(unclassified_spending, 0) as unclassified_spending,
     coalesce(invested, 0) as invested,
-    coalesce(income, 0) - coalesce(spending, 0) as savings
+    coalesce(income, 0) - coalesce(spending, 0) as savings,
+    case
+        when '{{ var("new_money_source") }}' = 'savings'
+            then
+                coalesce(income, 0) - coalesce(spending, 0)
+                + coalesce(non_operating_income, 0) - coalesce(dividends, 0)
+        else coalesce(invested, 0)
+    end as new_money
 from monthly

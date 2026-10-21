@@ -194,7 +194,7 @@ select
     y.closed_months,
     sum(m.income) as income,
     sum(m.spending) as spending,
-    sum(m.invested) as invested,
+    sum(m.new_money) as new_money,
     sum(m.savings) as savings,
     sum(m.savings) / sum(m.income) as savings_rate,
     sum(m.non_operating_income) as non_operating_income
@@ -210,11 +210,11 @@ order by y.year_label desc
     <Column id=spending fmt=brl0 />
     <Column id=savings fmt=brl0 />
     <Column id=savings_rate fmt=pct1 title="Savings rate" />
-    <Column id=invested fmt=brl0 title="Into investments" />
+    <Column id=new_money fmt=brl0 title="New money" />
     <Column id=non_operating_income fmt=brl0 title="One-off (asset sales)" />
 </DataTable>
 
-Savings is income minus spending: what went into investments plus what stayed in the account.
+Savings is income minus spending: what went into investments plus what stayed in the account. New money is what entered the household's wealth from outside the portfolio: here, the money put into investments.
 
 ## One-off money
 
