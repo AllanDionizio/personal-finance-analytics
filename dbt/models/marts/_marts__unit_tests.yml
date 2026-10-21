@@ -287,19 +287,19 @@ unit_tests:
     model: fct_portfolio_snapshots
     overrides:
       vars:
-        liquid_assets: '[{"match": "Cofrinho%", "note": "Antes de um ano rende 30% do CDI"}]'
+        liquid_assets: '[{"match": "Savings box%", "note": "Earns less if withdrawn within a year"}]'
     given:
       - input: ref('stg_portfolio_snapshots')
         rows:
           - {snapshot_id: "a", reference_date: "2026-01-31", asset: "Saldo (CDI 100%)", asset_class: "Cash", gross_value: 100, maturity_date: null}
           - {snapshot_id: "b", reference_date: "2026-01-31", asset: "CDB 110% CDI Liq. Diária", asset_class: "Fixed income", gross_value: 300, maturity_date: "2028-01-01"}
-          - {snapshot_id: "c", reference_date: "2026-01-31", asset: "Cofrinho 130%", asset_class: "Fixed income", gross_value: 50, maturity_date: "2027-01-01"}
+          - {snapshot_id: "c", reference_date: "2026-01-31", asset: "Savings box 120%", asset_class: "Fixed income", gross_value: 50, maturity_date: "2027-01-01"}
           - {snapshot_id: "d", reference_date: "2026-01-31", asset: "Tesouro IPCA+ 2035", asset_class: "Fixed income", gross_value: 1000, maturity_date: "2035-05-15"}
           - {snapshot_id: "e", reference_date: "2026-01-31", asset: "Fundo Renda Fixa Alfa", asset_class: "Fixed income", gross_value: 200, maturity_date: null}
     expect:
       rows:
         - {snapshot_id: "a", is_liquid: true, withdrawal_order: 1, liquidity_note: null}
         - {snapshot_id: "b", is_liquid: true, withdrawal_order: 3, liquidity_note: null}
-        - {snapshot_id: "c", is_liquid: true, withdrawal_order: 2, liquidity_note: "Antes de um ano rende 30% do CDI"}
+        - {snapshot_id: "c", is_liquid: true, withdrawal_order: 2, liquidity_note: "Earns less if withdrawn within a year"}
         - {snapshot_id: "d", is_liquid: false, withdrawal_order: null, liquidity_note: null}
         - {snapshot_id: "e", is_liquid: true, withdrawal_order: 4, liquidity_note: null}
