@@ -156,6 +156,25 @@ No credentials or real data needed. The ingestion is idempotent: re-running on t
 - [x] Evidence dashboard on the synthetic data, built in CI
 - [x] Dashboard and dbt docs published on GitHub Pages
 
+### What the real workbooks taught
+
+After v1 went live, the pipeline was run on the real workbooks, on the owners' machine only. The models held up, and the tests flagged what they should: an installment typed in the wrong month and rows with no category. The real data also exposed modeling gaps the synthetic data couldn't show:
+
+- **Contributions are not new money.** The real sheets book money reinvested from a maturing asset as a new contribution, so "invested capital" grew with money that was already in the portfolio and the return looked smaller than it was. The fix measures new money from the budget instead: each month's savings plus asset sales.
+- **Hand-typed asset names break name-based rules.** Some fixed-income products put "CDB" after the bank's label instead of first, so they fell into "Other"; and two lots of the same product differ only by their maturity date, so the snapshot key needs it too.
+- **The month still being paid distorts the return.** A period that reaches an unclosed month mixes a full portfolio value with half a month of flows, so its return is left out until the month closes.
+
+### Next: v2
+
+These come back as small pull requests, each with its own tests and docs:
+
+- [ ] Real-data fixes: asset classification, the snapshot key and closed-month returns
+- [ ] New money as a metric, configurable between booked contributions and savings, with a synthetic dataset that reinvests redemptions so the published site shows the difference
+- [ ] dbt exposures for the dashboard pages and enforced contracts on the marts
+- [ ] A dbt snapshot to keep the history of a changing dimension
+- [ ] Semantic layer: new money, savings rate and reserve months as MetricFlow metrics
+- [ ] Goals: a financial-independence target and the pace to reach it
+
 ## Repository structure
 
 ```
