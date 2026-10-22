@@ -12,7 +12,8 @@ license = { text = "MIT" }
 
 dependencies = [
     "openpyxl>=3.1",
-    "duckdb>=1.0",
+    # Evidence reads the warehouse with its own DuckDB, which opens only 1.x files
+    "duckdb>=1.0,<2",
 ]
 
 [project.optional-dependencies]
