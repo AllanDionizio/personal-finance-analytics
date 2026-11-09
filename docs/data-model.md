@@ -171,7 +171,7 @@ on debits and `payment_method_key` on credits, which a test enforces.
 | Model | Grain | Key columns |
 |---|---|---|
 | `dim_date` | one row per day, 2020-01-01 to 2030-12-31 | `date_day`, year, month, quarter, month name, weekday, is_weekend, first/last day of month |
-| `dim_category` | one row per category and type | `category_key`, `category`, `macro_category`, `category_type`; for income, `income_group` and `is_operating` (seed `income_groups`) |
+| `dim_category` | one row per category and type | `category_key`, `category`, `macro_category`, `category_type`; for income and the `'Unknown'` member, `income_group` and `is_operating` (seed `income_groups`; read them on credits only) |
 | `dim_owner` | one row per owner | `owner_key`, `owner`, `source_color` (`'#4BACC6'`) |
 | `dim_payment_method` | one row per payment method | `payment_method_key`, `payment_method`, `method_type` (`'credit_card'` / `'other'`), `source_color` |
 | `fct_transactions` | one row per transaction | `transaction_id`; FKs to the dims for `transaction_date`, `budget_month`, category, owner, payment method; `purchase_id` for installments; `amount`, `effective_amount` (amount if effective, else 0), `signed_effective_amount` (+ credits, − debits); the flags and installment columns of staging |

@@ -65,7 +65,7 @@ Star schema built by dbt in three layers: staging cleans and types the raw table
 - dbt data tests on every staging key and accepted-value set, plus source freshness on the raw tables
 - dbt unit tests that pin the modeling rules (installment parsing, per-workbook theme colors, card precedence, macro-category fallback, snapshot dedup, asset aliases, installments outside the workbooks) on hand-made rows
 - Relationship tests from every fact key to its dimension
-- Reconciliation tests: every raw transaction reaches the fact with its amount, each portfolio snapshot total matches its newest source file, each installment plan adds up to its purchase, the monthly cash flow adds up to the transactions it summarizes, and every contribution and dividend lands in exactly one portfolio period
+- Reconciliation tests: every raw transaction reaches the fact with its amount, each portfolio snapshot total matches its newest source file, each installment plan adds up to its purchase, the monthly cash flow adds up to the transactions it summarizes, the Income page's operating-income filter adds up to the same income, and every contribution and dividend lands in exactly one portfolio period
 - Unit tests for the metric rules too: closed months only, asset sales outside income, the modified Dietz return (checked to fail when the formula is broken) and the 12-month requirement of the reserve
 - Range and row-count checks with `dbt_expectations`, plus a custom generic test (`is_first_day_of_month`) on every `budget_month`
 - Every model and source column documented, shared definitions written once as doc blocks

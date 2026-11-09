@@ -50,7 +50,8 @@ models:
         description: >
           Source of an income category ('Salary', 'Variable pay', 'Benefits', 'Business',
           'Dividends', 'Other', 'Asset sales'), from seed income_groups; 'Other' when the seed
-          doesn't list it, and for the 'Unknown' member. NULL for expense categories.
+          doesn't list it, and for the 'Unknown' member. NULL for expense categories. The
+          'Unknown' member also covers debits, so read this column on credits only.
         data_tests:
           - not_null:
               config:
@@ -59,7 +60,8 @@ models:
         description: >
           For income categories, false when the money comes from selling an asset rather than
           earning it ('Asset sales'); such credits stay out of income. True for the 'Unknown'
-          member, as for an income category missing from the seed. NULL for expenses.
+          member, as for an income category missing from the seed. NULL for expenses. The
+          'Unknown' member also covers debits, so read this column on credits only.
         data_tests:
           - not_null:
               config:
