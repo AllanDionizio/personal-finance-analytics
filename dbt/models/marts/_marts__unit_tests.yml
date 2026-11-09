@@ -1,6 +1,32 @@
 version: 2
 
 unit_tests:
+  - name: test_unknown_category_counts_as_operating_income
+    description: >
+      An income category missing from the seed and the 'Unknown' member both
+      default to 'Other' and operating income, so a credit with an unlisted
+      category is income wherever is_operating is read. An asset sale stays
+      non-operating, and expense categories carry no income attributes.
+    model: dim_category
+    given:
+      - input: ref('stg_categories')
+        rows:
+          - {category_key: "salary", category_type: "income", category: "Salário", macro_category: null, is_legacy: false}
+          - {category_key: "sale", category_type: "income", category: "Investimentos", macro_category: null, is_legacy: false}
+          - {category_key: "gift", category_type: "income", category: "Presente", macro_category: null, is_legacy: false}
+          - {category_key: "market", category_type: "expense", category: "Mercado", macro_category: "Variable", is_legacy: false}
+      - input: ref('income_groups')
+        rows:
+          - {category: "Salário", income_group: "Salary", is_operating: true}
+          - {category: "Investimentos", income_group: "Asset sales", is_operating: false}
+    expect:
+      rows:
+        - {category_key: "salary", income_group: "Salary", is_operating: true}
+        - {category_key: "sale", income_group: "Asset sales", is_operating: false}
+        - {category_key: "gift", income_group: "Other", is_operating: true}
+        - {category_key: "market", income_group: null, is_operating: null}
+        - {category_key: "unknown", income_group: "Other", is_operating: true}
+
   - name: test_installments_settle_before_the_as_of_month
     description: >
       The as-of month is October 2026. p1 (3x from December 2020) is all
