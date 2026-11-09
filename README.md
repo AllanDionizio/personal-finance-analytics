@@ -38,7 +38,7 @@ The real workbooks hold a household's finances, so they never leave the owners' 
 - a portfolio that agrees with the budget: the budget's investment rows are exactly what enters the portfolio, a maturing position is reinvested inside it, and dividends follow the fund position
 - a one-off asset sale received in installments and typed on the income side, which must not count as income
 
-Output is deterministic for a given seed, so tests and CI always see the same data.
+Output is deterministic for a given seed, so tests and CI always see the same data. Why a generator and not masked real data: [ADR 1](docs/adr/0001-synthetic-data-instead-of-masked-real-data.md).
 
 ## Data model
 
@@ -85,7 +85,7 @@ Five Evidence pages (`dashboards/`) over the marts, built as a static site. They
 | Installments | How much of the future is committed? | Amount still owed, in months of income; what falls due each month, past the newest workbook; open purchases |
 | Portfolio | Does it grow from contributions or returns, and does it beat inflation? | Value against invested capital; return against IPCA by year and over rolling 12 months; liquid reserve against its 6–12 month band; maturity ladder; concentration; dividends |
 
-The metrics live in dbt (`fct_monthly_cashflow`, `fct_net_worth`, `fct_inflation_monthly`), where they are tested and documented; Evidence only reads the marts and filters them. A month counts once it is closed, so the month still being paid doesn't drag the totals down.
+The metrics live in dbt (`fct_monthly_cashflow`, `fct_net_worth`, `fct_inflation_monthly`), where they are tested and documented; Evidence reads the marts, filters them and adds the monthly values up, without redefining them. A month counts once it is closed, so the month still being paid doesn't drag the totals down.
 
 The look is the project's own, not Evidence's default: KPIs, charts and tables sit on cards, the type is Geist, and the site opens in dark mode with a light-mode switch. The household's own series lead in indigo and every benchmark (inflation, invested capital) is drawn in gray, so each comparison reads as "our line against the bar to beat". The palette and the gray were checked for color-vision deficiency, with separate steps for each mode, and every text color passes WCAG AA contrast on both surfaces. The theme is configuration and one stylesheet (`evidence.config.yaml`, `dashboards/components/brand.css`), so the pages keep Evidence's standard components.
 
@@ -131,16 +131,18 @@ No credentials or real data needed. The ingestion is idempotent: re-running on t
 
 ## Design decisions & trade-offs
 
+The structural ones are written up as decision records in [`docs/adr/`](docs/adr/), with the alternatives that were weighed.
+
 - **Decision:** English names for everything the project defines, source values left in Portuguese. **Why:** the code and models read for an international audience, while the raw layer stays a faithful copy of the workbooks (`'Sim'`, `'Mercado'`, `'Fixo'`). **Trade-off:** staging has to map the Portuguese values that drive logic, such as the paid flag and the special categories.
-- **Decision:** keep the raw layer literal (installment suffixes and raw color codes untouched). **Why:** parsing rules can change and be replayed in dbt without re-reading the workbooks. **Trade-off:** the raw tables are not directly queryable for analysis.
+- **Decision:** keep the raw layer literal (installment suffixes and raw color codes untouched). **Why:** parsing rules can change and be replayed in dbt without re-reading the workbooks. **Trade-off:** the raw tables are not directly queryable for analysis. ([ADR 2](docs/adr/0002-literal-raw-layer.md))
 - **Decision:** resolve both `rgb` and `theme` color references. **Why:** Google Sheets exports the same visible color either as a hex value or as a theme index, depending on how it was applied. The ingestion loads each workbook's theme palette into `raw.workbook_themes`, so dbt resolves a theme index against the file it came from. **Trade-off:** one more raw table, and theme tints are not applied (the owner colors in these workbooks have none).
 - **Decision:** keep money from selling an asset (the `'Investimentos'` income category) out of income, as non-operating income. **Why:** it is real cash in but doesn't repeat; counted as income, it would inflate the savings rate of the year it lands in. **Trade-off:** the split lives in a seed (`income_groups`) that has to follow how the categories are used.
 - **Decision:** measure the portfolio's return with the modified Dietz method, taking the recorded contributions as the only external flow and counting dividends as return. **Why:** the workbooks record contributions but not withdrawals (a maturing asset is reinvested inside the portfolio), and Dietz handles flows in the middle of a period without daily valuations. **Trade-off:** a withdrawal to spend that isn't recorded understates that period's return; it can't overstate it.
 - **Decision:** official inflation (IPCA) as a versioned seed from the Central Bank's public API, compounded over the same periods as the return. **Why:** the build stays reproducible and offline, and "did we beat inflation?" compares like with like. **Trade-off:** the seed is refreshed by hand when a new month is published.
-- **Decision:** define the dashboard's metrics in a dbt mart (`fct_monthly_cashflow`) and keep the Evidence queries to selects and filters. **Why:** income, spending and savings get one tested, documented definition, and any other tool reading the warehouse adds them up the same way. **Trade-off:** a new metric means a dbt change, not only a dashboard edit.
+- **Decision:** define the dashboard's metrics in dbt marts (`fct_monthly_cashflow`, `fct_net_worth`) and keep Evidence's source queries to selects and joins; pages only add the monthly values up. **Why:** income, spending and savings get one tested, documented definition, and any other tool reading the warehouse adds them up the same way. **Trade-off:** a new metric means a dbt change, not only a dashboard edit, and rollups such as the 12-month savings rate still live in the pages. ([ADR 3](docs/adr/0003-metrics-defined-in-dbt.md))
 - **Decision:** open-source Evidence (`@evidence-dev/evidence`) built to a static site. **Why:** it deploys anywhere static files go, with no account or server, and builds in CI on the same synthetic warehouse. **Trade-off:** Evidence's project template now points to its hosted product, Evidence Studio, which has a different syntax; moving there later would mean rewriting the pages.
 - **Decision:** brand the dashboard through Evidence's theme tokens, a project Tailwind preset and one global stylesheet, instead of custom components. **Why:** the pages keep using the standard BigValue, chart and table components, and the cards come from the theme (charts are painted with the card color). **Trade-off:** a few selectors target Evidence's markup (the KPI and sidebar classes), so an Evidence upgrade can need a CSS touch-up; the strict build and the screenshots catch it.
-- **Decision:** publish from the CI job that tested the build, not from a separate workflow. **Why:** the site on Pages is byte for byte what passed `dbt build` and the strict dashboard build; a failing test means nothing is deployed. **Trade-off:** a push to `main` waits for the whole pipeline before the site updates.
+- **Decision:** publish from the CI job that tested the build, not from a separate workflow. **Why:** the site on Pages is byte for byte what passed `dbt build` and the strict dashboard build; a failing test means nothing is deployed. **Trade-off:** a push to `main` waits for the whole pipeline before the site updates. ([ADR 4](docs/adr/0004-publish-from-the-tested-ci-job.md))
 - **Decision:** detect the debit-side layout from the header row instead of fixed positions. **Why:** a column was added in 2022, so 2021 workbooks have a different layout. **Trade-off:** the header detection has to be tested against both layouts.
 
 ## Roadmap
@@ -184,7 +186,7 @@ These come back as small pull requests, each with its own tests and docs:
 ├── dbt/                 # models, tests, macros, seeds
 ├── dashboards/          # Evidence pages and source queries
 ├── tests/               # Python unit tests
-└── docs/                # data model design
+└── docs/                # data model design, decision records (adr/)
 ```
 
 ---
