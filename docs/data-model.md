@@ -249,8 +249,9 @@ Regex `\((\d+)\s*/\s*(\d+)\)`, anywhere in the text:
 - `'Mercado'` → `'Mercado'`, 1/1, not an installment
 
 Collapse doubled whitespace, with or without a tag, and fix the `A - - B`
-left by a tag between two dashes. `ingestion/installment_parser.py` and
-the dbt `clean_description` macro implement the same rules.
+left by a tag between two dashes. `ingestion/installment_parser.py` (used only by its
+tests) and the dbt `clean_description` macro implement these rules; the macro also
+fixes `A - - B` when there is no tag, which the Python parser leaves as typed.
 
 ### 6.2 Color resolution (rgb + theme)
 
@@ -449,7 +450,7 @@ and the 12-month and year-to-date rates, compounded from the monthly ones.
 9. **Asset renamed by a typed note** → mapped back through the seed `asset_aliases`
 10. **Installments outside the workbooks** → rebuilt from the purchase plan in `fct_installments`
 11. **Past installments** → always paid in `fct_installments`, whatever the sheet says
-12. **Dashboard metrics** → defined in `fct_monthly_cashflow`, over closed months only; Evidence only selects and filters
+12. **Dashboard metrics** → defined in `fct_monthly_cashflow`, over closed months only; Evidence's source queries only select, and the page breakdowns that still work from transactions are listed in [ADR 3](adr/0003-metrics-defined-in-dbt.md)
 13. **Money from selling an asset** → non-operating income, outside income and the savings rate
 14. **Portfolio return** → modified Dietz, recorded contributions as the only external flow, dividends as return; compared with IPCA over the same periods
 15. **Liquid reserve** → cash plus fixed income with no maturity; target 6 to 12 months of fixed spending
