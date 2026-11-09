@@ -2,6 +2,9 @@
 -- whose category is in no list, so the fact's key is never NULL. Income
 -- categories carry their source group and whether they are operating income
 -- (seed income_groups); one missing from the seed counts as 'Other'.
+-- The 'Unknown' member gets the same defaults ('Other', operating), so a
+-- credit typed with an unlisted category counts as income the same way in
+-- fct_monthly_cashflow and in anything that filters on is_operating.
 
 with
 
@@ -43,5 +46,5 @@ select
     'Unknown' as category,
     'Unknown' as macro_category,
     false as is_legacy,
-    null as income_group,
-    null as is_operating
+    'Other' as income_group,
+    true as is_operating
