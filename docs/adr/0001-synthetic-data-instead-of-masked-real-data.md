@@ -28,5 +28,5 @@ The real workbooks never leave the owners' machine and never enter git. The repo
 - Anyone can clone and run the whole project with no credentials or real data, and CI needs no secrets.
 - The generator doubles as documentation: its docstring and catalog list every quirk the pipeline must handle.
 - Running end to end on the synthetic data caught two bugs before any real data was involved (the duplicate `transaction_id` and the portfolio totals loaded as holdings, in the README).
-- The generator only reproduces the quirks known when it was written. The first run on the real workbooks found gaps it could not show (see "What the real workbooks taught" in the README); each one has to be added to the generator by hand so CI covers it.
+- The generator only reproduces the quirks known when it was written. The first run on the real workbooks found gaps it could not show (see [What the real workbooks taught](../../README.md#what-the-real-workbooks-taught)); each one has to be added to the generator by hand so CI covers it.
 - The dashboard's numbers are fictional, and the generator is code to maintain alongside the pipeline.

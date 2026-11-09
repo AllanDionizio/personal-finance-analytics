@@ -14,7 +14,7 @@ Each metric is defined once, in a dbt mart, at the grain the pages read:
 - [`fct_net_worth`](../../dbt/models/marts/fct_net_worth.sql): portfolio value, flows, return and inflation over the same periods, and the liquid reserve;
 - [`fct_inflation_monthly`](../../dbt/models/marts/fct_inflation_monthly.sql): the IPCA series and its rates.
 
-Evidence's source queries ([`dashboards/sources/warehouse/`](../../dashboards/sources/warehouse/)) only select from the marts, join dimension labels and sort. The pages can add the monthly values up over a window or a category, but they do not decide what counts as income, spending or a closed month.
+Evidence's source queries ([`dashboards/sources/warehouse/`](../../dashboards/sources/warehouse/)) only select from the marts, join dimension labels, add a year label and sort. The headline numbers on the pages come from these marts, added up over a window or a year.
 
 The rules are pinned by dbt unit tests (for example, `test_monthly_cashflow_counts_closed_months_only`) and by reconciliation tests such as [`assert_cashflow_reconciles_to_transactions`](../../dbt/tests/assert_cashflow_reconciles_to_transactions.sql).
 
@@ -27,4 +27,5 @@ The rules are pinned by dbt unit tests (for example, `test_monthly_cashflow_coun
 
 - Income, spending and savings have one tested, documented definition, and any tool reading the warehouse adds them up the same way the dashboard does.
 - A new metric, or a change to one, is a dbt change with a test, not only a dashboard edit.
-- Rollups still live in the pages. The 12-month savings rate, for one, is computed on two pages (`index.md` and `income.md`), and no test checks that they agree. Moving these ratios into the semantic layer is the next step for them.
+- The decision is not applied everywhere yet. To break the numbers down by source, owner or category, the Income and Spending pages work from `transactions` and repeat two of the mart's rules: the closed-month cut (both pages) and the operating-income filter (Income). No test checks those queries against the mart, and they already differ on one case: a credit whose category is not in the category list gets `category_key = 'unknown'`, which the mart counts as operating income and the Income page leaves out.
+- Ratios also live in the pages: the savings rate is computed over the last 12 closed months on `index.md` and per calendar year on `income.md`. Moving the ratios into the semantic layer, and the breakdowns onto marts at their own grain, is the next step.

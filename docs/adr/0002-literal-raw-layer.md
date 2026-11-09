@@ -4,7 +4,7 @@
 
 ## Context
 
-The workbooks are typed by hand. The rules that turn them into facts (where an installment tag sits in a description, which color means which owner or card, how a legacy category maps to the current list) were bound to change as more of the data was read; the first run on the real workbooks already turned up rules that need to change (see "What the real workbooks taught" in the README). Each workbook is also a file someone keeps editing, so the same file is loaded again many times.
+The workbooks are typed by hand. The rules that turn them into facts (where an installment tag sits in a description, which color means which owner or card, how a legacy category maps to the current list) were bound to change as more of the data was read; the first run on the real workbooks already turned up rules that need to change (see [What the real workbooks taught](../../README.md#what-the-real-workbooks-taught)). Each workbook is also a file someone keeps editing, so the same file is loaded again many times.
 
 ## Decision
 
@@ -27,4 +27,4 @@ Cleaning, typing, installment parsing and the color mapping all happen in dbt st
 - A rule change is a dbt change, replayed with `dbt build` without touching the workbooks, and it is covered by dbt unit tests on hand-made rows.
 - Any fact row can be traced back to the file, sheet and row it came from, and [`assert_transactions_reconcile_to_raw`](../../dbt/tests/assert_transactions_reconcile_to_raw.sql) checks that every raw transaction reaches the fact with its amount.
 - The raw tables are not fit for analysis on their own: descriptions still carry tags and owners are still colors.
-- The installment rule now exists twice, in `installment_parser.py` and in the `clean_description` macro, and the two have to change together.
+- The installment rule exists twice: in `ingestion/installment_parser.py`, which the pipeline does not call and only its tests use, and in dbt staging (the tag extraction in `stg_transactions` and the `clean_description` macro). They already differ on one input: an untagged `A - - B` stays as typed in Python and becomes `A - B` in dbt.
